@@ -6,6 +6,8 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Gera o Prisma Client antes do build para que os tipos estejam disponíveis
+RUN npx prisma generate
 RUN npm run build
 
 # Remove dev dependencies após o build
