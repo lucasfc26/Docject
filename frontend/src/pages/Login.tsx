@@ -64,15 +64,15 @@ export function Login() {
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-10 gap-6">
       <Panel className="w-full max-w-[520px] p-8 md:p-10">
         <div className="mb-8 text-center">
-          <div>
+          <div className="flex flex-row items-center justify-center gap-6">
             <img
               alt="Docject"
-              className="mx-auto mb-5 h-42 w-auto object-contain"
+              className="mx-auto mb-5 h-32 w-auto object-contain"
               src="/DJ LOGO FULL.svg"
             />
             <img
               alt="MaselCorp"
-              className="mx-auto mb-5 h-42 w-auto object-contain"
+              className="mx-auto mb-5 h-32 w-auto object-contain"
               src="/MaseLCorp3D2.png"
             />
           </div>
