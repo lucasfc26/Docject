@@ -46,8 +46,8 @@ services:
   # ── Frontend React (Vite build + Nginx estático) ────────────────────────────
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+      context: .
+      dockerfile: frontend/Dockerfile.prod
       args:
         VITE_API_URL: /api
     container_name: projectfy_frontend
