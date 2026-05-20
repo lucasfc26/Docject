@@ -12,7 +12,10 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email }, include: { client: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, name: true, email: true, role: true, passwordHash: true }
+    });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       throw new UnauthorizedException("Invalid credentials");
     }
@@ -29,7 +32,7 @@ export class AuthService {
     return {
       accessToken: this.sign(user.id, user.role),
       refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, clientId: user.clientId }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     };
   }
 
@@ -43,7 +46,8 @@ export class AuthService {
         email,
         passwordHash: await bcrypt.hash(password, 10),
         role: "MANAGER"
-      }
+      },
+      select: { id: true, name: true, email: true, role: true }
     });
 
     const refreshToken = randomBytes(48).toString("hex");
@@ -58,7 +62,7 @@ export class AuthService {
     return {
       accessToken: this.sign(user.id, user.role),
       refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, clientId: user.clientId }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     };
   }
 
