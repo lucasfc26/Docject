@@ -45,7 +45,7 @@ export class AuthService {
         name,
         email,
         passwordHash: await bcrypt.hash(password, 10),
-        role: "MANAGER"
+        role: "ADMIN"
       },
       select: { id: true, name: true, email: true, role: true }
     });

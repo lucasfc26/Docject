@@ -26,3 +26,7 @@ nginx -t && systemctl reload nginx
 # 4. Gerar SSL
 
 certbot --nginx -d dj.maselcorp.com.br
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d
+docker exec projectfy_backend npx prisma db push
+docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend

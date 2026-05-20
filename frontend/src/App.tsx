@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 import { AppLayout } from "./layouts/AppLayout";
 import { useThemeStore } from "./stores/theme";
@@ -39,7 +39,7 @@ export default function App() {
         <Route path="/termos" element={<TermosDeUso />} />
         <Route path="/privacidade" element={<PoliticaDePrivacidade />} />
         <Route path="/suporte" element={<Suporte />} />
-        <Route element={<AppLayout />}>
+        <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
@@ -50,6 +50,7 @@ export default function App() {
           <Route path="/agenda" element={<AppointmentsPage />} />
           <Route path="/resources" element={<ResourcesPage />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
+          <Route path="/clients/dashboard" element={<ClientPortal />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -58,3 +59,28 @@ export default function App() {
     </>
   );
 }
+
+function ProtectedLayout() {
+  const location = useLocation();
+  const user = readStoredUser();
+  const token = localStorage.getItem("projectfy-access-token");
+
+  if (!token || !user) return <Navigate to="/login" replace />;
+
+  if (user.role === "CLIENT" && !clientAllowedPaths.has(location.pathname)) {
+    return <Navigate to="/client/dashboard" replace />;
+  }
+
+  return <AppLayout />;
+}
+
+function readStoredUser() {
+  try {
+    const raw = localStorage.getItem("projectfy-user");
+    return raw ? (JSON.parse(raw) as { role: string }) : null;
+  } catch {
+    return null;
+  }
+}
+
+const clientAllowedPaths = new Set(["/client/dashboard", "/clients/dashboard", "/settings"]);
