@@ -7,6 +7,16 @@ nano .env.prod
 
 docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d
 
+# Criar diretórios
+
+mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+# Verificar se nginx.conf já inclui sites-enabled
+
+grep -q "sites-enabled" /etc/nginx/nginx.conf && echo "OK" || echo "FALTA include"
+
+echo ' include /etc/nginx/sites-enabled/\*;' >> /etc/nginx/nginx.conf
+
 # 3. Configurar Nginx do host
 
 cp nginx-vps.conf.example /etc/nginx/sites-available/dj.maselcorp.com.br

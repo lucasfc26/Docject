@@ -1,8 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, Bell, Briefcase, CalendarDays, ChevronDown, CircleDollarSign, FileSignature, Handshake, KeyRound, LayoutDashboard, LogOut, Menu, Moon, Search, Settings, Sun, UserCog, UserRound, UsersRound } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Briefcase,
+  CalendarDays,
+  ChevronDown,
+  CircleDollarSign,
+  FileSignature,
+  Handshake,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Settings,
+  Sun,
+  UserCog,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import type { ComponentType } from "react";
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { Button } from "../components/ui";
 import { apiGet, apiPatch, logout, type ApiFeature } from "../services/api";
 import { useThemeStore } from "../stores/theme";
@@ -18,7 +44,7 @@ const titles: Record<string, string> = {
   "/agenda": "Agenda",
   "/resources": "Recursos",
   "/client/dashboard": "Portal do Cliente",
-  "/settings": "Configuracoes"
+  "/settings": "Configuracoes",
 };
 
 type HeaderNotification = {
@@ -40,16 +66,17 @@ export function AppLayout() {
   const user = readStoredUser();
   const { data: notifications = [] } = useQuery({
     queryKey: ["notifications"],
-    queryFn: () => apiGet<HeaderNotification[]>("/notifications")
+    queryFn: () => apiGet<HeaderNotification[]>("/notifications"),
   });
   const { data: features = [] } = useQuery({
     queryKey: ["features"],
-    queryFn: () => apiGet<ApiFeature[]>("/features")
+    queryFn: () => apiGet<ApiFeature[]>("/features"),
   });
   const unreadNotifications = notifications.filter((item) => !item.read);
   const markReadMutation = useMutation({
     mutationFn: (id: string) => apiPatch(`/notifications/${id}/read`, {}),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] })
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const signOut = () => {
@@ -57,14 +84,24 @@ export function AppLayout() {
     navigate("/login");
   };
 
+  if (!user) return <Navigate to="/login" replace />;
+
   return (
     <div className="app-shell">
       <aside className="hidden border-r border-[color:var(--line)] bg-[color:var(--panel)] px-5 py-6 backdrop-blur-xl lg:flex lg:flex-col">
         <div className="mb-10 flex items-center gap-3">
-          <img alt="Docject" className="h-11 w-11 rounded-2xl object-contain" src="/DJ LOGO.svg" />
+          <img
+            alt="Docject"
+            className="h-11 w-11 rounded-2xl object-contain"
+            src="/DJ LOGO.svg"
+          />
           <div>
-            <h1 className="font-display text-2xl font-bold leading-none">Docject</h1>
-            <p className="mono-label mt-1 text-[color:var(--muted)]">Operations OS</p>
+            <h1 className="font-display text-2xl font-bold leading-none">
+              Docject
+            </h1>
+            <p className="mono-label mt-1 text-[color:var(--muted)]">
+              Operations OS
+            </p>
           </div>
         </div>
 
@@ -72,18 +109,20 @@ export function AppLayout() {
           {features.map((item) => {
             const Icon = featureIcons[item.path] ?? LayoutDashboard;
             return (
-            <NavLink
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
-                  isActive ? "bg-[color:var(--primary)] text-white shadow-panel dark:bg-[color:var(--panel-strong)] dark:text-[color:var(--accent)]" : "text-[color:var(--muted)] hover:bg-[color:var(--panel-strong)] hover:text-[color:var(--text)]"
-                }`
-              }
-              key={item.path}
-              to={item.path}
-            >
-              <Icon size={19} />
-              {item.name}
-            </NavLink>
+              <NavLink
+                className={({ isActive }) =>
+                  `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                    isActive
+                      ? "bg-[color:var(--primary)] text-white shadow-panel dark:bg-[color:var(--panel-strong)] dark:text-[color:var(--accent)]"
+                      : "text-[color:var(--muted)] hover:bg-[color:var(--panel-strong)] hover:text-[color:var(--text)]"
+                  }`
+                }
+                key={item.path}
+                to={item.path}
+              >
+                <Icon size={19} />
+                {item.name}
+              </NavLink>
             );
           })}
         </nav>
@@ -92,12 +131,18 @@ export function AppLayout() {
       <main className="min-w-0">
         <header className="sticky top-0 z-30 flex min-h-20 items-center justify-between gap-4 border-b border-[color:var(--line)] bg-[color:var(--bg)]/78 px-4 backdrop-blur-xl md:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <Button className="lg:hidden" variant="secondary" aria-label="Abrir menu">
+            <Button
+              className="lg:hidden"
+              variant="secondary"
+              aria-label="Abrir menu"
+            >
               <Menu size={18} />
             </Button>
             <div>
               <p className="mono-label text-[color:var(--muted)]">Docject</p>
-              <h2 className="truncate font-display text-xl font-semibold md:text-2xl">{title}</h2>
+              <h2 className="truncate font-display text-xl font-semibold md:text-2xl">
+                {title}
+              </h2>
             </div>
           </div>
 
@@ -113,7 +158,11 @@ export function AppLayout() {
           </div>
 
           <div className="relative flex items-center gap-2">
-            <Button aria-label="Alternar tema" variant="secondary" onClick={toggleTheme}>
+            <Button
+              aria-label="Alternar tema"
+              variant="secondary"
+              onClick={toggleTheme}
+            >
               {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
             </Button>
             <Button
@@ -126,7 +175,11 @@ export function AppLayout() {
               }}
             >
               <Bell size={18} />
-              {unreadNotifications.length ? <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ember-500 px-1 text-[10px] font-bold text-white">{unreadNotifications.length}</span> : null}
+              {unreadNotifications.length ? (
+                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-ember-500 px-1 text-[10px] font-bold text-white">
+                  {unreadNotifications.length}
+                </span>
+              ) : null}
             </Button>
             <Button
               className="hidden md:inline-flex"
@@ -144,16 +197,29 @@ export function AppLayout() {
               <div className="absolute right-0 top-14 z-40 w-[min(360px,calc(100vw-2rem))] rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 shadow-panel dark:shadow-panel-dark">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="mono-label text-[color:var(--muted)]">Avisos</p>
-                  <span className="text-xs font-semibold text-[color:var(--muted)]">{unreadNotifications.length} nao lidos</span>
+                  <span className="text-xs font-semibold text-[color:var(--muted)]">
+                    {unreadNotifications.length} nao lidos
+                  </span>
                 </div>
                 <div className="max-h-80 space-y-2 overflow-y-auto">
                   {notifications.slice(0, 8).map((item) => (
-                    <button className={`w-full rounded-2xl border border-[color:var(--line)] p-3 text-left text-sm transition hover:bg-[color:var(--panel-strong)] ${item.read ? "opacity-60" : "bg-[color:var(--panel-strong)]"}`} key={item.id} onClick={() => markReadMutation.mutate(item.id)} type="button">
+                    <button
+                      className={`w-full rounded-2xl border border-[color:var(--line)] p-3 text-left text-sm transition hover:bg-[color:var(--panel-strong)] ${item.read ? "opacity-60" : "bg-[color:var(--panel-strong)]"}`}
+                      key={item.id}
+                      onClick={() => markReadMutation.mutate(item.id)}
+                      type="button"
+                    >
                       <p className="font-semibold">{item.title}</p>
-                      <p className="mt-1 text-xs text-[color:var(--muted)]">{new Date(item.createdAt).toLocaleString("pt-BR")}</p>
+                      <p className="mt-1 text-xs text-[color:var(--muted)]">
+                        {new Date(item.createdAt).toLocaleString("pt-BR")}
+                      </p>
                     </button>
                   ))}
-                  {!notifications.length ? <p className="rounded-2xl border border-dashed border-[color:var(--line)] p-3 text-sm text-[color:var(--muted)]">Sem avisos por enquanto.</p> : null}
+                  {!notifications.length ? (
+                    <p className="rounded-2xl border border-dashed border-[color:var(--line)] p-3 text-sm text-[color:var(--muted)]">
+                      Sem avisos por enquanto.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -162,17 +228,31 @@ export function AppLayout() {
               <div className="absolute right-0 top-14 z-40 w-64 rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3 shadow-panel dark:shadow-panel-dark">
                 <div className="border-b border-[color:var(--line)] px-3 py-3">
                   <p className="font-semibold">{user?.name ?? "Admin"}</p>
-                  <p className="mt-1 truncate text-xs text-[color:var(--muted)]">{user?.email ?? "admin@projectfy.io"}</p>
+                  <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+                    {user?.email ?? "admin@projectfy.io"}
+                  </p>
                 </div>
-                <button className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]" onClick={() => navigate("/settings")} type="button">
+                <button
+                  className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]"
+                  onClick={() => navigate("/settings")}
+                  type="button"
+                >
                   <UserRound size={17} />
                   Meu perfil
                 </button>
-                <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]" onClick={() => navigate("/settings")} type="button">
+                <button
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]"
+                  onClick={() => navigate("/settings")}
+                  type="button"
+                >
                   <KeyRound size={17} />
                   Mudar senha
                 </button>
-                <button className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold text-ember-600 transition hover:bg-ember-500/10 dark:text-ember-300" onClick={signOut} type="button">
+                <button
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold text-ember-600 transition hover:bg-ember-500/10 dark:text-ember-300"
+                  onClick={signOut}
+                  type="button"
+                >
                   <LogOut size={17} />
                   Sair
                 </button>
@@ -199,13 +279,21 @@ const featureIcons: Record<string, ComponentType<{ size?: number }>> = {
   "/agenda": CalendarDays,
   "/resources": UserCog,
   "/client/dashboard": Activity,
-  "/settings": Settings
+  "/settings": Settings,
 };
 
 function readStoredUser() {
   try {
     const raw = localStorage.getItem("projectfy-user");
-    return raw ? (JSON.parse(raw) as { id: string; name: string; email: string; role: string; clientId?: string }) : null;
+    return raw
+      ? (JSON.parse(raw) as {
+          id: string;
+          name: string;
+          email: string;
+          role: string;
+          clientId?: string;
+        })
+      : null;
   } catch {
     return null;
   }
