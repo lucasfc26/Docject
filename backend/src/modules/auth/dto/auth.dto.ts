@@ -1,4 +1,8 @@
-import { IsEmail, IsOptional, IsString, MinLength } from "class-validator";
+import { IsEmail, IsOptional, IsString, Matches, MinLength } from "class-validator";
+
+export const passwordRuleMessage =
+  "A senha deve ter no minimo 6 caracteres e pelo menos um caractere especial.";
+export const passwordSpecialCharacterPattern = /[^A-Za-z0-9]/;
 
 export class LoginDto {
   @IsEmail()
@@ -18,6 +22,7 @@ export class RegisterDto {
 
   @IsString()
   @MinLength(6)
+  @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password!: string;
 }
 
@@ -43,5 +48,6 @@ export class ResetPasswordDto {
 
   @IsString()
   @MinLength(6)
+  @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password!: string;
 }

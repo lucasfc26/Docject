@@ -12,8 +12,9 @@ export class AuthService {
   ) {}
 
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
+    const normalizedEmail = normalizeEmail(email);
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: "insensitive" } },
       select: { id: true, name: true, email: true, role: true, passwordHash: true }
     });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
@@ -37,13 +38,16 @@ export class AuthService {
   }
 
   async register(name: string, email: string, password: string) {
-    const existing = await this.prisma.user.findUnique({ where: { email } });
+    const normalizedEmail = normalizeEmail(email);
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizedEmail, mode: "insensitive" } }
+    });
     if (existing) throw new ConflictException("Email ja cadastrado");
 
     const user = await this.prisma.user.create({
       data: {
         name,
-        email,
+        email: normalizedEmail,
         passwordHash: await bcrypt.hash(password, 10),
         role: "ADMIN"
       },
@@ -85,12 +89,17 @@ export class AuthService {
   }
 
   forgotPassword(email: string) {
-    return { ok: true, email, mode: "local-mock" };
+    return { ok: true, email: normalizeEmail(email), mode: "local-mock" };
   }
 
   async resetPassword(email: string, password: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: normalizeEmail(email), mode: "insensitive" } },
+      select: { id: true }
+    });
+    if (!user) throw new UnauthorizedException("Invalid credentials");
     await this.prisma.user.update({
-      where: { email },
+      where: { id: user.id },
       data: { passwordHash: await bcrypt.hash(password, 10) }
     });
     return { ok: true };
@@ -104,6 +113,10 @@ export class AuthService {
   private sign(sub: string, role: string) {
     return this.jwt.sign({ sub, role }, { secret: process.env.JWT_SECRET ?? "local-dev-secret" });
   }
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
 async function asyncFind<T>(items: T[], predicate: (item: T) => Promise<boolean>) {

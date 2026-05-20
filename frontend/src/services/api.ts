@@ -30,7 +30,7 @@ export async function login(email: string, password: string) {
   const response = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email: normalizeEmail(email), password }),
   });
   await assertOk(response, "Credenciais invalidas");
   const data = (await response.json()) as LoginResponse;
@@ -49,7 +49,7 @@ export async function registerUser(
   const response = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email: normalizeEmail(email), password }),
   });
   await assertOk(response, "Nao foi possivel cadastrar usuario");
   const data = (await response.json()) as LoginResponse;
@@ -58,6 +58,10 @@ export async function registerUser(
   localStorage.setItem("projectfy-refresh-token", data.refreshToken);
   localStorage.setItem("projectfy-user", JSON.stringify(data.user));
   return data;
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }
 
 export function logout() {
@@ -167,8 +171,10 @@ export type ApiClient = {
   name: string;
   segment?: string;
   health: string;
+  document?: string;
   revenue: string;
   projects?: unknown[];
+  services?: unknown[];
 };
 
 export type ApiUser = {
@@ -215,6 +221,10 @@ export type ApiService = {
   id: string;
   name: string;
   description?: string;
+  frontendHealth?: string;
+  backendHealth?: string;
+  databaseHealth?: string;
+  notes?: string;
   monthlyValue: string;
   paymentDay: number;
   startDate: string;

@@ -19,6 +19,7 @@ import {
   UserCog,
   UserRound,
   UsersRound,
+  X,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import { useState } from "react";
@@ -60,6 +61,7 @@ export function AppLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { theme, toggleTheme } = useThemeStore();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const title = titles[location.pathname] ?? "Docject";
@@ -93,7 +95,7 @@ export function AppLayout() {
         <div className="mb-10 flex items-center gap-3">
           <img
             alt="Docject"
-            className="h-11 w-11 rounded-2xl object-contain"
+            className="brand-logo h-11 w-11 rounded-2xl object-contain"
             src="/DJ LOGO.svg"
           />
           <div>
@@ -136,10 +138,15 @@ export function AppLayout() {
               className="lg:hidden"
               variant="secondary"
               aria-label="Abrir menu"
+              onClick={() => {
+                setMobileSidebarOpen(true);
+                setNotificationsOpen(false);
+                setProfileOpen(false);
+              }}
             >
               <Menu size={18} />
             </Button>
-            <div>
+            <div className="hidden min-w-0 max-w-[220px] sm:block md:max-w-none">
               <p className="mono-label text-[color:var(--muted)]">Docject</p>
               <h2 className="truncate font-display text-xl font-semibold md:text-2xl">
                 {title}
@@ -147,7 +154,7 @@ export function AppLayout() {
             </div>
           </div>
 
-          <div className="hidden min-w-80 items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-2 md:flex">
+          <div className="hidden min-w-80 items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-2 xl:flex">
             <Search size={18} className="text-[color:var(--muted)]" />
             <input
               className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
@@ -155,6 +162,14 @@ export function AppLayout() {
               onKeyDown={(event) => {
                 if (event.key === "Enter") navigate("/projects");
               }}
+            />
+          </div>
+
+          <div className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center lg:hidden">
+            <img
+              alt="Docject"
+              className="brand-logo h-10 w-10 rounded-2xl object-contain"
+              src="/DJ LOGO.svg"
             />
           </div>
 
@@ -183,15 +198,17 @@ export function AppLayout() {
               ) : null}
             </Button>
             <Button
-              className="hidden md:inline-flex"
+              aria-label="Menu do usuario"
+              className="h-11 w-11 px-0 md:h-auto md:w-auto md:px-4"
               variant="secondary"
               onClick={() => {
                 setProfileOpen((current) => !current);
                 setNotificationsOpen(false);
               }}
             >
-              {user?.name ?? "Admin"}
-              <ChevronDown size={16} />
+              <UserRound size={18} className="md:hidden" />
+              <span className="hidden md:inline">{user?.name ?? "Admin"}</span>
+              <ChevronDown size={16} className="hidden md:block" />
             </Button>
 
             {notificationsOpen ? (
@@ -261,6 +278,57 @@ export function AppLayout() {
             ) : null}
           </div>
         </header>
+
+        {mobileSidebarOpen ? (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <button
+              aria-label="Fechar menu"
+              className="absolute inset-0 bg-black/35 backdrop-blur-sm"
+              onClick={() => setMobileSidebarOpen(false)}
+              type="button"
+            />
+            <aside className="absolute inset-y-0 left-0 flex w-[min(320px,calc(100vw-2rem))] flex-col border-r border-[color:var(--line)] bg-[color:var(--panel)] px-5 py-6 shadow-panel backdrop-blur-xl dark:shadow-panel-dark">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <p className="mono-label text-[color:var(--muted)]">Menu</p>
+                  <h2 className="font-display text-xl font-semibold">
+                    {title}
+                  </h2>
+                </div>
+                <Button
+                  aria-label="Fechar menu"
+                  variant="secondary"
+                  onClick={() => setMobileSidebarOpen(false)}
+                >
+                  <X size={18} />
+                </Button>
+              </div>
+
+              <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
+                {navFeatures.map((item) => {
+                  const Icon = featureIcons[item.path] ?? LayoutDashboard;
+                  return (
+                    <NavLink
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                          isActive
+                            ? "bg-[color:var(--primary)] text-white shadow-panel dark:bg-[color:var(--panel-strong)] dark:text-[color:var(--accent)]"
+                            : "text-[color:var(--muted)] hover:bg-[color:var(--panel-strong)] hover:text-[color:var(--text)]"
+                        }`
+                      }
+                      key={item.path}
+                      onClick={() => setMobileSidebarOpen(false)}
+                      to={item.path}
+                    >
+                      <Icon size={19} />
+                      {item.name}
+                    </NavLink>
+                  );
+                })}
+              </nav>
+            </aside>
+          </div>
+        ) : null}
 
         <div className="px-4 py-6 md:px-8 md:py-8">
           <Outlet />

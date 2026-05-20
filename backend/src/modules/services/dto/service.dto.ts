@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class CreateServiceDto {
   @IsString()
@@ -7,6 +7,22 @@ export class CreateServiceDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  frontendHealth?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  backendHealth?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  databaseHealth?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @IsString()
   clientId!: string;
@@ -36,6 +52,22 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  frontendHealth?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  backendHealth?: string;
+
+  @IsOptional()
+  @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
+  databaseHealth?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @IsOptional()
   @IsNumber()

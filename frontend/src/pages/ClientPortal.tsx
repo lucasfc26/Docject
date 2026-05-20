@@ -1,17 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-import { Download, MessageSquare, ReceiptText } from "lucide-react";
+import { Activity, Database, Download, MessageSquare, Monitor, ReceiptText, Server } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
-import { apiGet, type ApiClient, type ApiContract, type ApiProject, type ApiSettings } from "../services/api";
+import { apiGet, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
   const { data: clients = [] } = useQuery({ queryKey: ["clients"], queryFn: () => apiGet<ApiClient[]>("/clients") });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => apiGet<ApiProject[]>("/projects") });
+  const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => apiGet<ApiService[]>("/services") });
   const { data: contracts = [] } = useQuery({ queryKey: ["contracts"], queryFn: () => apiGet<ApiContract[]>("/contracts") });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<ApiSettings>("/settings") });
+  const [view, setView] = useState<"projects" | "services">("projects");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
   const user = readStoredUser();
   const isClientUser = user?.role === "CLIENT";
 
@@ -21,8 +24,13 @@ export function ClientPortal() {
     return projects.filter((project) => project.clientId === selectedClient.id || project.client?.id === selectedClient.id);
   }, [projects, selectedClient]);
   const selectedProject = projectOptions.find((project) => project.id === selectedProjectId) ?? projectOptions[0] ?? (!selectedClient ? projects[0] : undefined);
+  const serviceOptions = useMemo(() => {
+    if (!selectedClient) return services;
+    return services.filter((service) => service.clientId === selectedClient.id || service.client?.id === selectedClient.id);
+  }, [services, selectedClient]);
+  const selectedService = serviceOptions.find((service) => service.id === selectedServiceId) ?? serviceOptions[0];
   const selectedProgress = selectedProject ? projectProgress(selectedProject) : 0;
-  const projectClient = selectedProject?.client?.name ?? selectedClient?.name ?? "Cliente";
+  const projectClient = selectedProject?.client?.name ?? selectedService?.client?.name ?? selectedClient?.name ?? "Cliente";
   const projectModules = useMemo(() => [...(selectedProject?.modules ?? [])].sort((a, b) => a.orderIndex - b.orderIndex), [selectedProject]);
   const currentModule = projectModules.find((module) => !isModuleCompleted(module)) ?? projectModules[projectModules.length - 1];
   const contractUrl = contracts.find((contract) => contract.versions?.length)?.versions.at(-1)?.fileUrl;
@@ -42,8 +50,8 @@ export function ClientPortal() {
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="mono-label text-[color:var(--muted)]">Portal do cliente</p>
-            <h1 className="mt-2 font-display text-4xl font-bold">{selectedProject?.name ?? "Projeto"}</h1>
-            <p className="mt-3 max-w-2xl text-[color:var(--muted)]">Resumo objetivo de progresso, proximos marcos, arquivos compartilhados, contratos e financeiro de {projectClient}.</p>
+            <h1 className="mt-2 font-display text-4xl font-bold">{view === "projects" ? selectedProject?.name ?? "Projeto" : selectedService?.name ?? "Servico"}</h1>
+            <p className="mt-3 max-w-2xl text-[color:var(--muted)]">Resumo objetivo de progresso, servicos contratados, arquivos compartilhados, contratos e financeiro de {projectClient}.</p>
           </div>
           <div className={`grid w-full gap-3 ${isClientUser ? "md:grid-cols-[auto]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:w-auto xl:min-w-[620px]"}`}>
             {!isClientUser ? <label className="block">
@@ -54,6 +62,7 @@ export function ClientPortal() {
                 onChange={(event) => {
                   setSelectedClientId(event.target.value);
                   setSelectedProjectId("");
+                  setSelectedServiceId("");
                 }}
               >
                 {clients.map((client) => (
@@ -64,12 +73,13 @@ export function ClientPortal() {
               </select>
             </label> : null}
             {!isClientUser ? <label className="block">
-              <span className="mono-label text-[color:var(--muted)]">Projeto</span>
-              <select className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none" value={selectedProject?.id ?? ""} onChange={(event) => setSelectedProjectId(event.target.value)}>
-                {!projectOptions.length ? <option value="">Sem projetos</option> : null}
-                {projectOptions.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
+              <span className="mono-label text-[color:var(--muted)]">{view === "projects" ? "Projeto" : "Servico"}</span>
+              <select className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none" value={view === "projects" ? selectedProject?.id ?? "" : selectedService?.id ?? ""} onChange={(event) => view === "projects" ? setSelectedProjectId(event.target.value) : setSelectedServiceId(event.target.value)}>
+                {view === "projects" && !projectOptions.length ? <option value="">Sem projetos</option> : null}
+                {view === "services" && !serviceOptions.length ? <option value="">Sem servicos</option> : null}
+                {(view === "projects" ? projectOptions : serviceOptions).map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
                   </option>
                 ))}
               </select>
@@ -85,6 +95,30 @@ export function ClientPortal() {
           </div>
         </div>
       </Panel>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={view === "projects" ? "primary" : "secondary"}
+          onClick={() => setView("projects")}
+        >
+          <Activity size={17} />
+          Projetos
+        </Button>
+        <Button
+          type="button"
+          variant={view === "services" ? "primary" : "secondary"}
+          onClick={() => setView("services")}
+        >
+          <Server size={17} />
+          Servicos
+        </Button>
+      </div>
+
+      {view === "services" ? (
+        <ServiceClientView service={selectedService} clientName={projectClient} />
+      ) : (
+        <>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Panel className="p-6">
@@ -139,6 +173,89 @@ export function ClientPortal() {
           </div>
         </div>
       </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ServiceClientView({
+  service,
+  clientName,
+}: {
+  service?: ApiService;
+  clientName: string;
+}) {
+  if (!service) {
+    return (
+      <Panel className="p-6">
+        <p className="text-sm text-[color:var(--muted)]">
+          Nenhum servico associado a este cliente.
+        </p>
+      </Panel>
+    );
+  }
+
+  const healthItems = [
+    { label: "Frontend", value: service.frontendHealth ?? "STABLE", icon: Monitor },
+    { label: "Backend", value: service.backendHealth ?? "STABLE", icon: Server },
+    { label: "DB", value: service.databaseHealth ?? "STABLE", icon: Database },
+  ];
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <Panel className="p-6">
+        <p className="mono-label text-[color:var(--muted)]">Servico fornecido</p>
+        <h2 className="mt-2 font-display text-3xl font-bold">{service.name}</h2>
+        <p className="mt-3 text-[color:var(--muted)]">
+          {service.description || `Servico ativo para ${clientName}.`}
+        </p>
+        <div className="mt-6 grid gap-3 text-sm">
+          <div className="flex items-center justify-between border-t border-[color:var(--line)] pt-4">
+            <span className="text-[color:var(--muted)]">Status</span>
+            <StatusBadge tone={service.active ? "success" : "neutral"}>
+              {service.active ? "Ativo" : "Inativo"}
+            </StatusBadge>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[color:var(--muted)]">Mensalidade</span>
+            <strong>{money(Number(service.monthlyValue ?? 0))}</strong>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[color:var(--muted)]">Dia de pagamento</span>
+            <strong>Dia {service.paymentDay}</strong>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel className="p-6">
+        <p className="mono-label text-[color:var(--muted)]">Saude operacional</p>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          {healthItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div
+                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4"
+                key={item.label}
+              >
+                <div className="mb-4 flex items-center justify-between">
+                  <Icon size={20} className="text-[color:var(--muted)]" />
+                  <StatusBadge tone={healthTone(item.value)}>
+                    {translateHealth(item.value)}
+                  </StatusBadge>
+                </div>
+                <p className="font-semibold">{item.label}</p>
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4">
+          <p className="mono-label text-[color:var(--muted)]">Observacao</p>
+          <p className="mt-2 text-sm text-[color:var(--muted)]">
+            {service.notes || "Nenhuma observacao registrada para este servico."}
+          </p>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -154,6 +271,16 @@ function readStoredUser() {
 
 function translateProject(status: string) {
   return { PLANNING: "Planejamento", IN_PROGRESS: "Em andamento", PAUSED: "Pausado", WAITING_CLIENT: "Aguardando cliente", COMPLETED: "Concluido", CANCELLED: "Cancelado" }[status] ?? status;
+}
+
+function translateHealth(status: string) {
+  return { EXCELLENT: "Excelente", ATTENTION: "Atencao", STABLE: "Estavel" }[status] ?? status;
+}
+
+function healthTone(status: string) {
+  if (status === "EXCELLENT") return "success";
+  if (status === "ATTENTION") return "warning";
+  return "neutral";
 }
 
 function money(value: number) {

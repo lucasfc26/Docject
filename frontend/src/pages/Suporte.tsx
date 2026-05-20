@@ -156,7 +156,7 @@ export function Suporte() {
                   className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm outline-none transition focus:border-[color:var(--primary)] focus:ring-2 focus:ring-[color:var(--primary)]/20 dark:focus:border-[color:var(--accent)]"
                   placeholder="joao@empresa.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
                 />
               </label>
             </div>

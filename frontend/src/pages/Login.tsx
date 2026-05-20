@@ -117,7 +117,10 @@ export function Login() {
               <Mail size={18} className="text-[color:var(--muted)]" />
               <input
                 className="w-full bg-transparent outline-none"
-                {...register("email")}
+                type="email"
+                {...register("email", {
+                  setValueAs: (value) => String(value).trim().toLowerCase(),
+                })}
               />
             </div>
             {errors.email ? (

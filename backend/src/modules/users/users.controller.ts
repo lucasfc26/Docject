@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -21,7 +22,7 @@ export class UsersController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Get()
-  findAll(@Req() request: AuthenticatedRequest) {
+  async findAll(@Req() request: AuthenticatedRequest) {
     const user = request.user;
     if (user?.role !== "ADMIN" && user?.role !== "MANAGER") {
       return this.prisma.user.findMany({
@@ -30,8 +31,9 @@ export class UsersController {
         orderBy: { createdAt: "asc" },
       });
     }
+    const adminId = await this.resolveResponsibleAdminId(user.sub);
     return this.prisma.user.findMany({
-      where: { OR: [{ id: user.sub }, { adminId: user.sub }] },
+      where: { OR: [{ id: adminId }, { adminId }] },
       select: userSelect,
       orderBy: { createdAt: "asc" },
     });
@@ -44,14 +46,15 @@ export class UsersController {
   ) {
     const requestedRole = body.role ?? "CLIENT";
     this.assertCanCreateRole(request.user?.role, requestedRole);
+    const email = normalizeEmail(body.email);
+    await this.assertEmailAvailable(email);
     const passwordHash = await bcrypt.hash(body.password, 10);
-    const adminId =
-      request.user?.role === "ADMIN" || request.user?.role === "MANAGER"
-        ? request.user.sub
-        : undefined;
+    const adminId = request.user
+      ? await this.resolveResponsibleAdminId(request.user.sub)
+      : undefined;
     return this.prisma.user.create({
       data: {
-        email: body.email,
+        email,
         name: body.name,
         phone: body.phone,
         address: body.address,
@@ -69,6 +72,8 @@ export class UsersController {
     const passwordHash = body.password
       ? await bcrypt.hash(body.password, 10)
       : undefined;
+    const email = body.email ? normalizeEmail(body.email) : undefined;
+    if (email) await this.assertEmailAvailable(email, id);
     const isSelf = request.user?.sub === id;
     if (isSelf && (body.role !== undefined || body.clientId !== undefined)) {
       throw new BadRequestException("Nao e permitido alterar seu proprio perfil de acesso.");
@@ -78,7 +83,7 @@ export class UsersController {
     return this.prisma.user.update({
       where: { id },
       data: {
-        email: body.email,
+        email,
         name: body.name,
         phone: body.phone,
         address: body.address,
@@ -101,6 +106,24 @@ export class UsersController {
       throw new BadRequestException("Seu perfil nao permite criar ou atribuir este tipo de usuario.");
     }
   }
+
+  private async resolveResponsibleAdminId(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, adminId: true },
+    });
+    return user?.adminId ?? user?.id ?? userId;
+  }
+
+  private async assertEmailAvailable(email: string, ignoredUserId?: string) {
+    const existing = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (existing && existing.id !== ignoredUserId) {
+      throw new ConflictException("Email ja cadastrado");
+    }
+  }
 }
 
 const allowedCreatedRoles: Record<string, string[]> = {
@@ -121,3 +144,7 @@ const userSelect = {
   createdAt: true,
   updatedAt: true,
 };
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}

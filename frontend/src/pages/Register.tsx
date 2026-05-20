@@ -7,11 +7,19 @@ import { z } from "zod";
 import { Button, Panel } from "../components/ui";
 import { registerUser } from "../services/api";
 
+const passwordSpecialCharacterPattern = /[^A-Za-z0-9]/;
+
 const schema = z
   .object({
     name: z.string().min(2, "Informe seu nome"),
     email: z.string().email("Informe um email valido"),
-    password: z.string().min(6, "Use pelo menos 6 caracteres"),
+    password: z
+      .string()
+      .min(6, "Use pelo menos 6 caracteres")
+      .regex(
+        passwordSpecialCharacterPattern,
+        "Use pelo menos um caractere especial, como , . ! @ #",
+      ),
     confirmPassword: z.string().min(6, "Confirme sua senha")
   })
   .refine((values) => values.password === values.confirmPassword, {
@@ -62,7 +70,13 @@ export function Register() {
             <input className="w-full bg-transparent outline-none" {...register("name")} />
           </RegisterField>
           <RegisterField error={errors.email?.message} icon={<Mail size={18} />} label="Email">
-            <input className="w-full bg-transparent outline-none" {...register("email")} />
+            <input
+              className="w-full bg-transparent outline-none"
+              type="email"
+              {...register("email", {
+                setValueAs: (value) => String(value).trim().toLowerCase(),
+              })}
+            />
           </RegisterField>
           <RegisterField error={errors.password?.message} icon={<Lock size={18} />} label="Senha">
             <input className="w-full bg-transparent outline-none" type="password" {...register("password")} />

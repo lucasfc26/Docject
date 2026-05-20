@@ -71,6 +71,7 @@ model Client {
   name      String
   segment   String?
   health    String          @default("STABLE")
+  document  String?
   revenue   Decimal         @default(0)
   owner     User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   ownerId   String?
@@ -175,6 +176,10 @@ model Service {
   id             String                 @id @default(uuid())
   name           String
   description    String?
+  frontendHealth String                 @default("STABLE")
+  backendHealth  String                 @default("STABLE")
+  databaseHealth String                 @default("STABLE")
+  notes          String?
   monthlyValue   Decimal                @default(0)
   paymentDay     Int
   startDate      DateTime

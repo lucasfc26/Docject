@@ -13,7 +13,7 @@ export class ClientsController {
   findAll(@Req() request: AuthenticatedRequest) {
     return this.prisma.client.findMany({
       where: clientScope(request.user),
-      include: { contacts: true, projects: true },
+      include: { contacts: true, projects: true, services: true },
       orderBy: { createdAt: "desc" }
     });
   }
@@ -22,7 +22,11 @@ export class ClientsController {
   findOne(@Param("id") id: string, @Req() request: AuthenticatedRequest) {
     return this.prisma.client.findFirst({
       where: { id, ...clientScope(request.user) },
-      include: { contacts: true, projects: { include: { modules: true } } }
+      include: {
+        contacts: true,
+        projects: { include: { modules: true } },
+        services: true,
+      }
     });
   }
 
@@ -43,6 +47,12 @@ export class ClientsController {
 
   @Post(":id/contacts")
   addContact(@Param("id") clientId: string, @Body() body: CreateClientContactDto) {
-    return this.prisma.clientContact.create({ data: { ...body, clientId } });
+    return this.prisma.clientContact.create({
+      data: { ...body, email: normalizeEmail(body.email), clientId },
+    });
   }
+}
+
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
 }

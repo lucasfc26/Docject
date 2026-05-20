@@ -1,4 +1,8 @@
-import { IsEmail, IsIn, IsOptional, IsString, MinLength } from "class-validator";
+import { IsEmail, IsIn, IsOptional, IsString, Matches, MinLength } from "class-validator";
+import {
+  passwordRuleMessage,
+  passwordSpecialCharacterPattern,
+} from "../../auth/dto/auth.dto";
 
 export class CreateUserDto {
   @IsEmail()
@@ -17,6 +21,7 @@ export class CreateUserDto {
 
   @IsString()
   @MinLength(6)
+  @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password!: string;
 
   @IsOptional()
@@ -48,6 +53,7 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   @MinLength(6)
+  @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password?: string;
 
   @IsOptional()

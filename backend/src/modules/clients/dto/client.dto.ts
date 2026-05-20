@@ -9,6 +9,10 @@ export class CreateClientDto {
   segment?: string;
 
   @IsOptional()
+  @IsString()
+  document?: string;
+
+  @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
   health?: string;
 
@@ -26,6 +30,10 @@ export class UpdateClientDto {
   @IsOptional()
   @IsString()
   segment?: string;
+
+  @IsOptional()
+  @IsString()
+  document?: string;
 
   @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])

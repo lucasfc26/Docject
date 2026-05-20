@@ -43,9 +43,14 @@ type Field = {
   type?: "text" | "number" | "datetime-local" | "select" | "password";
   options?: Array<{ label: string; value: string }>;
   required?: boolean;
+  requiredOnCreate?: boolean;
 };
 
 type Row = Record<string, unknown>;
+
+const passwordSpecialCharacterPattern = /[^A-Za-z0-9]/;
+const passwordRuleMessage =
+  "A senha deve ter no minimo 6 caracteres e pelo menos um caractere especial, como , . ! @ #.";
 
 type ProjectModuleForm = {
   id?: string;
@@ -77,6 +82,10 @@ type PaymentForm = {
 type ServiceForm = {
   name: string;
   description: string;
+  frontendHealth: string;
+  backendHealth: string;
+  databaseHealth: string;
+  notes: string;
   clientId: string;
   monthlyValue: string;
   paymentDay: string;
@@ -142,30 +151,33 @@ export function ClientsPage() {
           render: (row) => translateHealth(String(row.health)),
         },
         {
-          key: "revenue",
-          label: "Receita",
-          render: (row) => money(Number(row.revenue)),
+          key: "document",
+          label: "CPF/CNPJ",
+          render: (row) => row.document || "-",
         },
         {
           key: "projects",
-          label: "Projetos",
-          render: (row) => String(row.projects?.length ?? 0),
+          label: "Projetos e Servicos",
+          render: (row) =>
+            String((row.projects?.length ?? 0) + (row.services?.length ?? 0)),
         },
       ]}
       fields={[
         { name: "name", label: "Nome", required: true },
         { name: "segment", label: "Segmento" },
+        { name: "document", label: "CPF/CNPJ" },
         {
           name: "health",
           label: "Saude",
           type: "select",
           options: healthOptions,
         },
-        { name: "revenue", label: "Receita", type: "number" },
       ]}
       normalize={(values) => ({
-        ...values,
-        revenue: Number(values.revenue ?? 0),
+        name: values.name,
+        segment: values.segment || undefined,
+        document: values.document || undefined,
+        health: values.health || "STABLE",
       })}
     />
   );
@@ -1226,6 +1238,10 @@ export function ServicesPage() {
       const payload = {
         name: form.name,
         description: form.description || undefined,
+        frontendHealth: form.frontendHealth,
+        backendHealth: form.backendHealth,
+        databaseHealth: form.databaseHealth,
+        notes: form.notes || undefined,
         ...(editing ? {} : { clientId: form.clientId }),
         monthlyValue: Number(form.monthlyValue || 0),
         paymentDay: Number(form.paymentDay || 1),
@@ -1275,6 +1291,10 @@ export function ServicesPage() {
     setForm({
       name: service.name,
       description: service.description ?? "",
+      frontendHealth: service.frontendHealth ?? "STABLE",
+      backendHealth: service.backendHealth ?? "STABLE",
+      databaseHealth: service.databaseHealth ?? "STABLE",
+      notes: service.notes ?? "",
       clientId: service.clientId,
       monthlyValue: String(service.monthlyValue ?? 0),
       paymentDay: String(service.paymentDay ?? 1),
@@ -1494,6 +1514,69 @@ export function ServicesPage() {
                   setForm((current) => ({ ...current, startDate: value }))
                 }
               />
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">
+                  Saude do frontend
+                </span>
+                <select
+                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                  value={form.frontendHealth}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      frontendHealth: event.target.value,
+                    }))
+                  }
+                >
+                  {healthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">
+                  Saude do backend
+                </span>
+                <select
+                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                  value={form.backendHealth}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      backendHealth: event.target.value,
+                    }))
+                  }
+                >
+                  {healthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">
+                  Saude do banco de dados
+                </span>
+                <select
+                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                  value={form.databaseHealth}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      databaseHealth: event.target.value,
+                    }))
+                  }
+                >
+                  {healthOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="flex min-h-20 items-center gap-2">
                 <input
                   checked={form.active}
@@ -1513,6 +1596,13 @@ export function ServicesPage() {
                 value={form.description}
                 onChange={(value) =>
                   setForm((current) => ({ ...current, description: value }))
+                }
+              />
+              <TextArea
+                label="Observacao para o cliente"
+                value={form.notes}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, notes: value }))
                 }
               />
               <div className="flex items-end justify-end gap-2 md:col-span-2">
@@ -1544,6 +1634,10 @@ function defaultServiceForm(clientId = ""): ServiceForm {
   return {
     name: "",
     description: "",
+    frontendHealth: "STABLE",
+    backendHealth: "STABLE",
+    databaseHealth: "STABLE",
+    notes: "",
     clientId,
     monthlyValue: "",
     paymentDay: "1",
@@ -1728,15 +1822,15 @@ export function FinancialPage() {
       </Panel>
 
       <div className="schedule-shell overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--panel)] shadow-panel dark:shadow-panel-dark">
-        <div className="grid gap-4 border-b border-[color:var(--line)] bg-[color:var(--panel)] p-5 backdrop-blur-xl xl:grid-cols-[minmax(240px,1fr)_auto_minmax(240px,1fr)] xl:items-center">
+        <div className="grid gap-4 border-b border-[color:var(--line)] bg-[color:var(--panel)] p-4 backdrop-blur-xl md:p-5 xl:grid-cols-[minmax(240px,1fr)_auto_minmax(240px,1fr)] xl:items-center">
           <div>
             <p className="mono-label text-[color:var(--muted)]">Calendario</p>
-            <h2 className="mt-1 min-w-0 truncate font-display text-3xl font-bold md:text-4xl">
+            <h2 className="mt-1 min-w-0 truncate font-display text-2xl font-bold md:text-4xl">
               {financialTitle(currentDate, view)}
             </h2>
           </div>
-          <div className="justify-self-start xl:justify-self-center">
-            <div className="flex w-[196px] items-center justify-between rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
+          <div className="w-full justify-self-start xl:w-auto xl:justify-self-center">
+            <div className="flex w-full max-w-[196px] items-center justify-between rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
               <Button
                 aria-label="Periodo anterior"
                 variant="ghost"
@@ -1764,10 +1858,10 @@ export function FinancialPage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 xl:justify-self-end">
-            <div className="flex rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
+            <div className="flex w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1 sm:w-auto">
               {(["Day", "Week", "Month"] as const).map((mode) => (
                 <button
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === mode ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
+                  className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${view === mode ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
                   key={mode}
                   onClick={() => setView(mode)}
                   type="button"
@@ -1790,11 +1884,11 @@ export function FinancialPage() {
               onEdit={startEditPayment}
             />
           ) : (
-            <div className="min-w-[980px]">
+            <div className="min-w-0">
               <div
                 className="sticky top-0 z-20 grid border-b border-[color:var(--line)] bg-[color:var(--panel)] backdrop-blur-xl"
                 style={{
-                  gridTemplateColumns: `72px repeat(${periodDays.length}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `clamp(48px, 8vw, 72px) repeat(${periodDays.length}, minmax(0, 1fr))`,
                 }}
               >
                 <div className="border-r border-[color:var(--line)]" />
@@ -1807,7 +1901,7 @@ export function FinancialPage() {
                       {weekdayLabel(day)}
                     </p>
                     <button
-                      className={`mx-auto mt-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full font-display text-2xl font-bold ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
                       onClick={() => {
                         setCurrentDate(day);
                         setView("Day");
@@ -1822,7 +1916,7 @@ export function FinancialPage() {
               <div
                 className="relative grid"
                 style={{
-                  gridTemplateColumns: `72px repeat(${periodDays.length}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `clamp(48px, 8vw, 72px) repeat(${periodDays.length}, minmax(0, 1fr))`,
                   height: `${scheduleHours.length * hourHeight}px`,
                 }}
               >
@@ -2173,11 +2267,11 @@ function FinancialMonthCalendar({
   const days = buildMonthDays(currentDate);
 
   return (
-    <div className="min-w-[820px]">
+    <div className="min-w-0">
       <div className="grid grid-cols-7 border-b border-[color:var(--line)] bg-[color:var(--panel)] backdrop-blur-xl">
         {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map((day) => (
           <div
-            className="mono-label border-r border-[color:var(--line)] px-4 py-3 text-center text-[color:var(--muted)] last:border-r-0"
+            className="mono-label border-r border-[color:var(--line)] px-1 py-3 text-center text-[color:var(--muted)] last:border-r-0 sm:px-4"
             key={day}
           >
             {day}
@@ -2190,11 +2284,11 @@ function FinancialMonthCalendar({
           const muted = day.getMonth() !== currentDate.getMonth();
           return (
             <div
-              className={`min-h-36 border-b border-r border-[color:var(--line)] p-3 last:border-r-0 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
+              className={`min-h-28 border-b border-r border-[color:var(--line)] p-1.5 last:border-r-0 sm:min-h-36 sm:p-3 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
               key={day.toISOString()}
             >
               <button
-                className={`mb-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display font-semibold ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
                 onClick={() => onDayClick(day)}
                 type="button"
               >
@@ -2203,7 +2297,7 @@ function FinancialMonthCalendar({
               <div className="space-y-2">
                 {dayOrders.slice(0, 3).map((order) => (
                   <button
-                    className={`w-full rounded-xl border px-3 py-2 text-left text-xs shadow-panel transition hover:-translate-y-0.5 ${paymentToneClass(order)}`}
+                    className={`w-full rounded-xl border px-2 py-1.5 text-left text-[10px] shadow-panel transition hover:-translate-y-0.5 sm:px-3 sm:py-2 sm:text-xs ${paymentToneClass(order)}`}
                     key={order.id}
                     onClick={() => onEdit(order)}
                     type="button"
@@ -2249,7 +2343,7 @@ function FinancialScheduleCard({
     0,
     visibleDays.findIndex((day) => isSameDate(day, start)),
   );
-  const dayWidth = `calc((100% - 72px) / ${dayCount})`;
+  const dayWidth = `calc((100% - ${scheduleTimeColumnWidth}) / ${dayCount})`;
   const eventHour = Math.max(
     0,
     Math.min(23.99, start.getHours() + start.getMinutes() / 60),
@@ -2258,9 +2352,9 @@ function FinancialScheduleCard({
 
   return (
     <button
-      className={`absolute z-20 rounded-r-xl border-l-4 p-3 text-left shadow-panel backdrop-blur-xl transition hover:scale-[1.01] ${paymentToneClass(order)}`}
+      className={`absolute z-20 rounded-r-xl border-l-4 p-1 text-left text-[10px] shadow-panel backdrop-blur-xl transition hover:scale-[1.01] sm:p-3 sm:text-sm ${paymentToneClass(order)}`}
       style={{
-        left: `calc(72px + ${dayIndex} * ${dayWidth})`,
+        left: `calc(${scheduleTimeColumnWidth} + ${dayIndex} * ${dayWidth})`,
         top,
         width: dayWidth,
         minHeight: 64,
@@ -2268,13 +2362,13 @@ function FinancialScheduleCard({
       onClick={() => onEdit(order)}
       type="button"
     >
-      <p className="font-mono text-xs font-bold">
+      <p className="font-mono text-[10px] font-bold sm:text-xs">
         {timeLabel(start)} - {translateTransaction(order.status)}
       </p>
       <p className="mt-1 line-clamp-2 font-semibold leading-tight">
         {order.module?.name ?? order.entity}
       </p>
-      <p className="mt-1 truncate text-xs opacity-80">
+      <p className="mt-1 truncate text-[10px] opacity-80 sm:text-xs">
         {signedMoney(order)} -{" "}
         {order.module?.project?.name ??
           order.service?.name ??
@@ -2374,12 +2468,12 @@ export function AppointmentsPage() {
 
   return (
     <div className="schedule-shell relative overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--panel)] shadow-panel dark:shadow-panel-dark">
-      <div className="grid gap-4 border-b border-[color:var(--line)] bg-[color:var(--panel)] p-5 backdrop-blur-xl xl:grid-cols-[minmax(240px,1fr)_auto_minmax(240px,1fr)] xl:items-center">
-        <h1 className="min-w-0 truncate font-display text-3xl font-bold md:text-4xl">
+      <div className="grid gap-4 border-b border-[color:var(--line)] bg-[color:var(--panel)] p-4 backdrop-blur-xl md:p-5 xl:grid-cols-[minmax(240px,1fr)_auto_minmax(240px,1fr)] xl:items-center">
+        <h1 className="min-w-0 truncate font-display text-2xl font-bold md:text-4xl">
           {calendarTitle(currentDate, selectedView)}
         </h1>
-        <div className="justify-self-start xl:justify-self-center">
-          <div className="flex w-[196px] items-center justify-between rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
+        <div className="w-full justify-self-start xl:w-auto xl:justify-self-center">
+          <div className="flex w-full max-w-[196px] items-center justify-between rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
             <Button
               aria-label="Periodo anterior"
               variant="ghost"
@@ -2408,10 +2502,10 @@ export function AppointmentsPage() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 xl:justify-self-end">
-          <div className="flex rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
+          <div className="flex w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1 sm:w-auto">
             {(["Day", "Week", "Month"] as const).map((view) => (
               <button
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${selectedView === view ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
+                className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${selectedView === view ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
                 key={view}
                 onClick={() => {
                   setSelectedView(view);
@@ -2443,11 +2537,11 @@ export function AppointmentsPage() {
               onEdit={startEdit}
             />
           ) : (
-            <div className="min-w-[980px]">
+            <div className="min-w-0">
               <div
                 className="sticky top-0 z-20 grid border-b border-[color:var(--line)] bg-[color:var(--panel)] backdrop-blur-xl"
                 style={{
-                  gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `clamp(48px, 8vw, 72px) repeat(${visibleDays.length}, minmax(0, 1fr))`,
                 }}
               >
                 <div className="border-r border-[color:var(--line)]" />
@@ -2460,7 +2554,7 @@ export function AppointmentsPage() {
                       {weekdayLabel(day)}
                     </p>
                     <button
-                      className={`mx-auto mt-2 grid h-11 w-11 cursor-pointer place-items-center rounded-full font-display text-2xl font-bold ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
                       onClick={() => {
                         setCurrentDate(day);
                         setSelectedView("Day");
@@ -2476,7 +2570,7 @@ export function AppointmentsPage() {
               <div
                 className="relative grid"
                 style={{
-                  gridTemplateColumns: `72px repeat(${visibleDays.length}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `clamp(48px, 8vw, 72px) repeat(${visibleDays.length}, minmax(0, 1fr))`,
                   height: `${scheduleHours.length * hourHeight}px`,
                 }}
               >
@@ -2510,7 +2604,7 @@ export function AppointmentsPage() {
 
                 {visibleDays.some((day) => isSameDate(day, new Date())) ? (
                   <div
-                    className="pointer-events-none absolute left-[72px] right-0 z-10 flex items-center"
+                    className="pointer-events-none absolute left-[clamp(48px,8vw,72px)] right-0 z-10 flex items-center"
                     style={{ top: currentLineTop(new Date()) }}
                   >
                     <span className="h-3 w-3 rounded-full bg-[color:var(--primary)] dark:bg-[color:var(--warning)]" />
@@ -2540,95 +2634,94 @@ export function AppointmentsPage() {
           )}
         </div>
 
-        <aside
-          className={`absolute bottom-0 right-0 top-24 z-30 flex w-[min(360px,calc(100%-1rem))] flex-col gap-7 overflow-y-auto border-l border-[color:var(--line)] bg-[color:var(--panel)] p-6 shadow-panel backdrop-blur-xl transition-transform duration-300 dark:shadow-panel-dark ${sidePanelOpen ? "translate-x-0" : "translate-x-[calc(100%-56px)]"}`}
+        <button
+          className="absolute right-4 top-28 z-40 grid h-10 w-10 place-items-center rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] text-[color:var(--muted)] shadow-sm transition hover:text-[color:var(--text)]"
+          onClick={() => setSidePanelOpen((current) => !current)}
+          type="button"
+          aria-label={sidePanelOpen ? "Recolher painel" : "Expandir painel"}
         >
-          <button
-            className="absolute left-3 top-4 grid h-10 w-10 place-items-center rounded-full border border-[color:var(--line)] bg-[color:var(--panel-strong)] text-[color:var(--muted)] shadow-sm transition hover:text-[color:var(--text)]"
-            onClick={() => setSidePanelOpen((current) => !current)}
-            type="button"
-            aria-label={sidePanelOpen ? "Recolher painel" : "Expandir painel"}
-          >
-            {sidePanelOpen ? (
-              <ChevronRight size={18} />
-            ) : (
-              <ChevronLeft size={18} />
-            )}
-          </button>
-          <div
-            className={`${sidePanelOpen ? "opacity-100" : "pointer-events-none opacity-0"} pl-8 transition-opacity duration-200`}
-          >
-            <section>
-              <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-bold">
-                <Bell
-                  className="text-[color:var(--primary)] dark:text-[color:var(--warning)]"
-                  size={24}
-                />
-                Reminders
-              </h2>
-              <div className="space-y-3">
-                {todayEvents.length ? (
-                  todayEvents.map((event) => (
-                    <Reminder
-                      key={event.id}
-                      title={event.title}
-                      meta={`${timeRangeLabel(event)}${event.client ? ` - ${event.client}` : ""}`}
-                      urgent={
-                        new Date(event.startsAt).getTime() < today.getTime()
-                      }
-                    />
-                  ))
-                ) : (
-                  <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 text-sm text-[color:var(--muted)]">
-                    Nenhum compromisso para hoje.
-                  </p>
-                )}
-              </div>
-            </section>
+          {sidePanelOpen ? (
+            <ChevronRight size={18} />
+          ) : (
+            <ChevronLeft size={18} />
+          )}
+        </button>
 
-            <section>
-              <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-bold">
-                <CalendarDays
-                  className="text-[color:var(--primary)] dark:text-[color:var(--warning)]"
-                  size={24}
-                />
-                Upcoming
-              </h2>
-              <div className="relative space-y-5 border-l border-[color:var(--line)] pl-5">
-                {upcomingEvents.map((event, index) => (
-                  <div className="relative" key={event.id}>
-                    <span
-                      className={`absolute -left-[26px] top-1 h-3 w-3 rounded-full ${index === 0 ? "bg-[color:var(--primary)] dark:bg-[color:var(--warning)]" : "bg-[color:var(--muted)]"}`}
-                    />
-                    <p className="mono-label mb-2 text-[color:var(--muted)]">
-                      {relativeDayLabel(new Date(event.startsAt), today)}
+        {sidePanelOpen ? (
+          <aside className="absolute bottom-0 right-0 top-24 z-30 flex w-[min(360px,calc(100%-1rem))] flex-col gap-7 overflow-y-auto border-l border-[color:var(--line)] bg-[color:var(--panel)] p-6 pt-20 shadow-panel backdrop-blur-xl dark:shadow-panel-dark">
+            <div className="pl-2">
+              <section>
+                <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-bold">
+                  <Bell
+                    className="text-[color:var(--primary)] dark:text-[color:var(--warning)]"
+                    size={24}
+                  />
+                  Reminders
+                </h2>
+                <div className="space-y-3">
+                  {todayEvents.length ? (
+                    todayEvents.map((event) => (
+                      <Reminder
+                        key={event.id}
+                        title={event.title}
+                        meta={`${timeRangeLabel(event)}${event.client ? ` - ${event.client}` : ""}`}
+                        urgent={
+                          new Date(event.startsAt).getTime() < today.getTime()
+                        }
+                      />
+                    ))
+                  ) : (
+                    <p className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 text-sm text-[color:var(--muted)]">
+                      Nenhum compromisso para hoje.
                     </p>
-                    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4">
-                      <p className="font-semibold">{event.title}</p>
-                      <p className="mt-2 flex items-center gap-1 text-sm text-[color:var(--muted)]">
-                        <Clock size={14} />
-                        {timeRangeLabel(event)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+                  )}
+                </div>
+              </section>
 
-            <section className="mt-7 overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-gradient-to-br from-[color:var(--accent)]/20 to-[color:var(--warning)]/20 p-5">
-              <p className="mono-label text-[color:var(--primary)] dark:text-[color:var(--accent)]">
-                Focus Mode
-              </p>
-              <p className="mt-3 text-sm text-[color:var(--text)]">
-                Bloqueie distracoes pelos proximos 120 minutos.
-              </p>
-              <Button className="mt-4 w-full" variant="secondary">
-                <Focus size={17} />
-                Enable
-              </Button>
-            </section>
-          </div>
-        </aside>
+              <section>
+                <h2 className="mb-4 flex items-center gap-2 font-display text-2xl font-bold">
+                  <CalendarDays
+                    className="text-[color:var(--primary)] dark:text-[color:var(--warning)]"
+                    size={24}
+                  />
+                  Upcoming
+                </h2>
+                <div className="relative space-y-5 border-l border-[color:var(--line)] pl-5">
+                  {upcomingEvents.map((event, index) => (
+                    <div className="relative" key={event.id}>
+                      <span
+                        className={`absolute -left-[26px] top-1 h-3 w-3 rounded-full ${index === 0 ? "bg-[color:var(--primary)] dark:bg-[color:var(--warning)]" : "bg-[color:var(--muted)]"}`}
+                      />
+                      <p className="mono-label mb-2 text-[color:var(--muted)]">
+                        {relativeDayLabel(new Date(event.startsAt), today)}
+                      </p>
+                      <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4">
+                        <p className="font-semibold">{event.title}</p>
+                        <p className="mt-2 flex items-center gap-1 text-sm text-[color:var(--muted)]">
+                          <Clock size={14} />
+                          {timeRangeLabel(event)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="mt-7 overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-gradient-to-br from-[color:var(--accent)]/20 to-[color:var(--warning)]/20 p-5">
+                <p className="mono-label text-[color:var(--primary)] dark:text-[color:var(--accent)]">
+                  Focus Mode
+                </p>
+                <p className="mt-3 text-sm text-[color:var(--text)]">
+                  Bloqueie distracoes pelos proximos 120 minutos.
+                </p>
+                <Button className="mt-4 w-full" variant="secondary">
+                  <Focus size={17} />
+                  Enable
+                </Button>
+              </section>
+            </div>
+          </aside>
+        ) : null}
       </div>
 
       <ModalOverlay open={open}>
@@ -2916,9 +3009,17 @@ export function SettingsPage() {
       userMutation.reset();
       return;
     }
+    if (
+      userForm.password &&
+      (userForm.password.length < 6 ||
+        !passwordSpecialCharacterPattern.test(userForm.password))
+    ) {
+      userMutation.reset();
+      return;
+    }
     userMutation.mutate({
       name: userForm.name,
-      email: userForm.email,
+      email: normalizeEmail(userForm.email),
       phone: userForm.phone || undefined,
       address: userForm.address || undefined,
       ...(userForm.password ? { password: userForm.password } : {}),
@@ -2988,13 +3089,22 @@ export function SettingsPage() {
               As senhas precisam ser iguais.
             </p>
           ) : null}
+          {userForm.password &&
+          (userForm.password.length < 6 ||
+            !passwordSpecialCharacterPattern.test(userForm.password)) ? (
+            <p className="md:col-span-2 text-sm text-ember-600 dark:text-ember-400">
+              {passwordRuleMessage}
+            </p>
+          ) : null}
           <Button
             className="md:col-span-2"
             disabled={
               userMutation.isPending ||
               Boolean(
                 userForm.password &&
-                userForm.password !== userForm.confirmPassword,
+                  (userForm.password !== userForm.confirmPassword ||
+                    userForm.password.length < 6 ||
+                    !passwordSpecialCharacterPattern.test(userForm.password)),
               )
             }
             type="submit"
@@ -3030,7 +3140,12 @@ export function SettingsPage() {
           fields={[
             { name: "name", label: "Nome", required: true },
             { name: "email", label: "Email", required: true },
-            { name: "password", label: "Senha", type: "password" },
+            {
+              name: "password",
+              label: "Senha",
+              type: "password",
+              requiredOnCreate: true,
+            },
             {
               name: "role",
               label: "Papel",
@@ -3049,7 +3164,7 @@ export function SettingsPage() {
           ]}
           normalize={(values, editing) => ({
             name: values.name,
-            email: values.email,
+            email: normalizeEmail(values.email),
             role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
             clientId:
               values.role === "CLIENT" ? values.clientId || undefined : null,
@@ -3351,6 +3466,7 @@ function CrudPage<T extends { id: string }>({
                     }))
                   }
                   disabled={Boolean(editing && field.name === "clientId")}
+                  required={field.required || Boolean(!editing && field.requiredOnCreate)}
                 />
               ))}
               <Button
@@ -3421,11 +3537,13 @@ function FieldInput({
   value,
   onChange,
   disabled,
+  required,
 }: {
   field: Field;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  required?: boolean;
 }) {
   if (field.type === "select") {
     return (
@@ -3436,7 +3554,7 @@ function FieldInput({
         <select
           className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
           disabled={disabled}
-          required={field.required}
+          required={required}
           value={value}
           onChange={(event) => onChange(event.target.value)}
         >
@@ -3455,8 +3573,8 @@ function FieldInput({
     <TextInput
       disabled={disabled}
       label={field.label}
-      required={field.required}
-      type={field.type ?? "text"}
+      required={required}
+      type={field.name.toLowerCase().includes("email") ? "email" : field.type ?? "text"}
       value={value}
       onChange={onChange}
     />
@@ -3484,10 +3602,15 @@ function TextInput({
       <input
         className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none disabled:opacity-60"
         disabled={disabled}
+        inputMode={inputModeFor(label, type)}
+        maxLength={maxLengthFor(label)}
+        minLength={type === "password" ? 6 : undefined}
+        pattern={type === "password" ? ".*[^A-Za-z0-9].*" : undefined}
+        title={type === "password" ? passwordRuleMessage : undefined}
         required={required}
         type={type}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(formatInputValue(label, type, event.target.value))}
       />
     </label>
   );
@@ -3521,6 +3644,81 @@ function normalizeInputValue(value: unknown, type?: Field["type"]) {
     return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 16);
   }
   return String(value);
+}
+
+function normalizeEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function formatInputValue(label: string, type: string, value: string) {
+  if (type === "email") return normalizeEmail(value);
+  const normalizedLabel = normalizeLabel(label);
+  if (normalizedLabel.includes("telefone") || normalizedLabel.includes("phone")) {
+    return maskPhone(value);
+  }
+  if (normalizedLabel.includes("cpf")) return maskCpf(value);
+  if (normalizedLabel.includes("cnpj")) return maskCnpj(value);
+  return value;
+}
+
+function inputModeFor(label: string, type: string) {
+  const normalizedLabel = normalizeLabel(label);
+  if (type === "email") return "email";
+  if (
+    normalizedLabel.includes("telefone") ||
+    normalizedLabel.includes("phone") ||
+    normalizedLabel.includes("cpf") ||
+    normalizedLabel.includes("cnpj")
+  ) {
+    return "numeric";
+  }
+  return undefined;
+}
+
+function maxLengthFor(label: string) {
+  const normalizedLabel = normalizeLabel(label);
+  if (normalizedLabel.includes("telefone") || normalizedLabel.includes("phone")) return 15;
+  if (normalizedLabel.includes("cpf")) return 14;
+  if (normalizedLabel.includes("cnpj")) return 18;
+  return undefined;
+}
+
+function normalizeLabel(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function onlyDigits(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
+function maskPhone(value: string) {
+  const digits = onlyDigits(value, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function maskCpf(value: string) {
+  const digits = onlyDigits(value, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+function maskCnpj(value: string) {
+  const digits = onlyDigits(value, 14);
+  return digits
+    .replace(/^(\d{2})(\d)/, "$1.$2")
+    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1/$2")
+    .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
 const healthOptions = [
@@ -3636,6 +3834,7 @@ function translateTransaction(status: string) {
 
 const scheduleHours = Array.from({ length: 24 }, (_, hour) => hour);
 const hourHeight = 92;
+const scheduleTimeColumnWidth = "clamp(48px, 8vw, 72px)";
 
 function buildWeek(date: Date) {
   const start = new Date(date);
@@ -3932,7 +4131,7 @@ function ScheduleEventCard({
     0,
     visibleDays.findIndex((day) => isSameDate(day, start)),
   );
-  const dayWidth = `calc((100% - 72px) / ${dayCount})`;
+  const dayWidth = `calc((100% - ${scheduleTimeColumnWidth}) / ${dayCount})`;
   const tones = [
     "border-l-[color:var(--warning)] bg-[color:var(--warning)]/15",
     "border-l-[color:var(--primary)] bg-[color:var(--accent)]/18",
@@ -3946,9 +4145,9 @@ function ScheduleEventCard({
 
   return (
     <button
-      className={`absolute z-20 rounded-r-xl border-l-4 p-3 text-left shadow-panel backdrop-blur-xl transition hover:scale-[1.01] ${tones[index % tones.length]}`}
+      className={`absolute z-20 rounded-r-xl border-l-4 p-1 text-left text-[10px] shadow-panel backdrop-blur-xl transition hover:scale-[1.01] sm:p-3 sm:text-sm ${tones[index % tones.length]}`}
       style={{
-        left: `calc(72px + ${dayIndex} * ${dayWidth})`,
+        left: `calc(${scheduleTimeColumnWidth} + ${dayIndex} * ${dayWidth})`,
         top,
         width: dayWidth,
         height,
@@ -3957,18 +4156,18 @@ function ScheduleEventCard({
       type="button"
     >
       <p
-        className={`font-mono text-xs font-bold ${textTones[index % textTones.length]}`}
+        className={`font-mono text-[10px] font-bold sm:text-xs ${textTones[index % textTones.length]}`}
       >
         {timeRangeLabel(event)}
       </p>
       <p className="mt-1 line-clamp-2 font-semibold leading-tight">
         {event.title}
       </p>
-      <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+      <p className="mt-1 truncate text-[10px] text-[color:var(--muted)] sm:text-xs">
         {event.client || event.location || "Docject"}
       </p>
       {event.notes ? (
-        <p className="mt-1 line-clamp-1 text-xs text-[color:var(--muted)]">
+        <p className="mt-1 line-clamp-1 text-[10px] text-[color:var(--muted)] sm:text-xs">
           {event.notes}
         </p>
       ) : null}
@@ -3996,11 +4195,11 @@ function MonthCalendar({
   }
 
   return (
-    <div className="min-w-[820px]">
+    <div className="min-w-0">
       <div className="grid grid-cols-7 border-b border-[color:var(--line)] bg-[color:var(--panel)] backdrop-blur-xl">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
           <div
-            className="mono-label border-r border-[color:var(--line)] px-4 py-3 text-center text-[color:var(--muted)] last:border-r-0"
+            className="mono-label border-r border-[color:var(--line)] px-1 py-3 text-center text-[color:var(--muted)] last:border-r-0 sm:px-4"
             key={day}
           >
             {day}
@@ -4013,11 +4212,11 @@ function MonthCalendar({
           const muted = day.getMonth() !== currentDate.getMonth();
           return (
             <div
-              className={`min-h-32 border-b border-r border-[color:var(--line)] p-3 last:border-r-0 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
+              className={`min-h-28 border-b border-r border-[color:var(--line)] p-1.5 last:border-r-0 sm:min-h-32 sm:p-3 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
               key={day.toISOString()}
             >
               <button
-                className={`mb-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display font-semibold ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
                 onClick={() => onDayClick(day)}
                 type="button"
               >
@@ -4026,7 +4225,7 @@ function MonthCalendar({
               <div className="space-y-2">
                 {dayEvents.slice(0, 3).map((event) => (
                   <button
-                    className="w-full rounded-xl border-l-4 border-l-[color:var(--primary)] bg-[color:var(--panel-strong)] px-3 py-2 text-left text-xs shadow-panel transition hover:-translate-y-0.5 dark:border-l-[color:var(--warning)]"
+                    className="w-full rounded-xl border-l-4 border-l-[color:var(--primary)] bg-[color:var(--panel-strong)] px-2 py-1.5 text-left text-[10px] shadow-panel transition hover:-translate-y-0.5 dark:border-l-[color:var(--warning)] sm:px-3 sm:py-2 sm:text-xs"
                     key={event.id}
                     onClick={() => onEdit(event)}
                     type="button"
