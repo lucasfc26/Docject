@@ -179,6 +179,7 @@ export type ApiUser = {
   address?: string;
   role: string;
   clientId?: string;
+  adminId?: string;
   client?: ApiClient;
 };
 

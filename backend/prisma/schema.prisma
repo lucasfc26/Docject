@@ -48,6 +48,9 @@ model User {
   client        Client?        @relation("ClientPortalUsers", fields: [clientId], references: [id])
   clientId      String?
   ownedClients  Client[]       @relation("ClientOwner")
+  admin         User?          @relation("AdminStaff", fields: [adminId], references: [id])
+  adminId       String?
+  staffUsers    User[]         @relation("AdminStaff")
   refreshTokens RefreshToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt

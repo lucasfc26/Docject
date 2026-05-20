@@ -2825,7 +2825,24 @@ export function SettingsPage() {
     queryKey: ["clients"],
     queryFn: () => apiGet<ApiClient[]>("/clients"),
   });
-  const currentUser = users[0];
+  const storedUserId = useMemo(() => {
+    try {
+      return (
+        (
+          JSON.parse(localStorage.getItem("projectfy-user") ?? "{}") as {
+            id?: string;
+          }
+        ).id ?? ""
+      );
+    } catch {
+      return "";
+    }
+  }, []);
+  const currentUser =
+    users.find((u) => u.id === storedUserId) ??
+    users.find((u) => u.role === "ADMIN") ??
+    users[0];
+  const staffUsers = users.filter((u) => u.id !== currentUser?.id);
   const [settingsForm, setSettingsForm] = useState({
     timezone: "America/Fortaleza",
     currency: "BRL",
@@ -3030,14 +3047,20 @@ export function SettingsPage() {
       </Panel>
 
       <CrudPage<ApiUser>
-        title="Usuarios de clientes"
-        subtitle="Crie acessos e associe cada usuario ao cliente correto."
+        title="Equipe e clientes"
+        subtitle="Usuarios associados a este admin. Funcionarios (Manager, Financial) e clientes com acesso ao portal."
         queryKey="users"
         endpoint="/users"
+        filterFn={(row) => row.id !== currentUser?.id}
         columns={[
           { key: "name", label: "Nome" },
           { key: "email", label: "Email" },
-          { key: "role", label: "Papel" },
+          {
+            key: "role",
+            label: "Papel",
+            render: (row) =>
+              roleOptions.find((o) => o.value === row.role)?.label ?? row.role,
+          },
           {
             key: "client",
             label: "Cliente",
@@ -3157,6 +3180,7 @@ function CrudPage<T extends { id: string }>({
   fields,
   normalize,
   afterCreate,
+  filterFn,
 }: {
   title: string;
   subtitle: string;
@@ -3169,6 +3193,7 @@ function CrudPage<T extends { id: string }>({
     editing?: T | null,
   ) => Record<string, unknown>;
   afterCreate?: (created: T) => Promise<unknown>;
+  filterFn?: (row: T) => boolean;
 }) {
   const queryClient = useQueryClient();
   const {
@@ -3232,9 +3257,11 @@ function CrudPage<T extends { id: string }>({
     mutation.mutate(normalize(values, editing));
   };
 
-  const filteredData = data.filter((row) =>
-    JSON.stringify(row).toLowerCase().includes(filter.toLowerCase()),
-  );
+  const filteredData = data
+    .filter((row) => (filterFn ? filterFn(row) : true))
+    .filter((row) =>
+      JSON.stringify(row).toLowerCase().includes(filter.toLowerCase()),
+    );
 
   return (
     <Panel className="overflow-hidden">
