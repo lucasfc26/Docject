@@ -72,6 +72,7 @@ export function AppLayout() {
     queryKey: ["features"],
     queryFn: () => apiGet<ApiFeature[]>("/features"),
   });
+  const navFeatures = features.length ? features : defaultFeaturesForRole(user?.role);
   const unreadNotifications = notifications.filter((item) => !item.read);
   const markReadMutation = useMutation({
     mutationFn: (id: string) => apiPatch(`/notifications/${id}/read`, {}),
@@ -106,7 +107,7 @@ export function AppLayout() {
         </div>
 
         <nav className="flex flex-1 flex-col gap-1">
-          {features.map((item) => {
+          {navFeatures.map((item) => {
             const Icon = featureIcons[item.path] ?? LayoutDashboard;
             return (
               <NavLink
@@ -280,6 +281,44 @@ const featureIcons: Record<string, ComponentType<{ size?: number }>> = {
   "/resources": UserCog,
   "/client/dashboard": Activity,
   "/settings": Settings,
+};
+
+function defaultFeaturesForRole(role?: string): ApiFeature[] {
+  const paths =
+    role === "CLIENT"
+      ? ["/client/dashboard", "/settings"]
+      : [
+          "/dashboard",
+          "/clients",
+          "/projects",
+          "/services",
+          "/contracts",
+          "/financial",
+          "/agenda",
+          "/resources",
+          "/settings",
+        ];
+
+  return paths.map((path, index) => ({
+    id: path,
+    name: featureNames[path] ?? path,
+    path,
+    orderIndex: index + 1,
+    role: role ?? "ADMIN",
+  }));
+}
+
+const featureNames: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/clients": "Clientes",
+  "/projects": "Projetos",
+  "/services": "Servicos",
+  "/contracts": "Contratos",
+  "/financial": "Financeiro",
+  "/agenda": "Agenda",
+  "/resources": "Recursos",
+  "/client/dashboard": "Portal Cliente",
+  "/settings": "Configuracoes",
 };
 
 function readStoredUser() {

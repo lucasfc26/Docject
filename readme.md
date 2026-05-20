@@ -30,3 +30,5 @@ certbot --nginx -d dj.maselcorp.com.br
 docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d
 docker exec projectfy_backend npx prisma db push
 docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
