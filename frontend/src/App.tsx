@@ -67,8 +67,9 @@ function ProtectedLayout() {
 
   if (!token || !user) return <Navigate to="/login" replace />;
 
-  if (user.role === "CLIENT" && !clientAllowedPaths.has(location.pathname)) {
-    return <Navigate to="/client/dashboard" replace />;
+  const allowedPaths = allowedPathsByRole[user.role] ?? allowedPathsByRole.CLIENT;
+  if (!allowedPaths.has(location.pathname)) {
+    return <Navigate to={defaultPathByRole[user.role] ?? "/client/dashboard"} replace />;
   }
 
   return <AppLayout />;
@@ -83,4 +84,16 @@ function readStoredUser() {
   }
 }
 
-const clientAllowedPaths = new Set(["/client/dashboard", "/clients/dashboard", "/settings"]);
+const allowedPathsByRole: Record<string, Set<string>> = {
+  ADMIN: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings"]),
+  MANAGER: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings"]),
+  FINANCIAL: new Set(["/dashboard", "/financial", "/settings"]),
+  CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/settings"]),
+};
+
+const defaultPathByRole: Record<string, string> = {
+  ADMIN: "/dashboard",
+  MANAGER: "/dashboard",
+  FINANCIAL: "/financial",
+  CLIENT: "/client/dashboard",
+};

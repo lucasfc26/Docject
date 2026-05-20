@@ -2825,23 +2825,28 @@ export function SettingsPage() {
     queryKey: ["clients"],
     queryFn: () => apiGet<ApiClient[]>("/clients"),
   });
-  const storedUserId = useMemo(() => {
+  const storedUser = useMemo(() => {
     try {
-      return (
-        (
-          JSON.parse(localStorage.getItem("projectfy-user") ?? "{}") as {
-            id?: string;
-          }
-        ).id ?? ""
-      );
+      return JSON.parse(localStorage.getItem("projectfy-user") ?? "{}") as {
+        id?: string;
+        role?: string;
+      };
     } catch {
-      return "";
+      return {};
     }
   }, []);
   const currentUser =
-    users.find((u) => u.id === storedUserId) ??
+    users.find((u) => u.id === storedUser.id) ??
     users.find((u) => u.role === "ADMIN") ??
     users[0];
+  const currentRole = storedUser.role ?? currentUser?.role ?? "CLIENT";
+  const canManageUsers = currentRole === "ADMIN" || currentRole === "MANAGER";
+  const canEditPreferences = currentRole === "ADMIN" || currentRole === "MANAGER";
+  const assignableRoleOptions = roleOptions.filter((option) => {
+    if (currentRole === "ADMIN") return ["MANAGER", "FINANCIAL", "CLIENT"].includes(option.value);
+    if (currentRole === "MANAGER") return ["FINANCIAL", "CLIENT"].includes(option.value);
+    return false;
+  });
   const staffUsers = users.filter((u) => u.id !== currentUser?.id);
   const [settingsForm, setSettingsForm] = useState({
     timezone: "America/Fortaleza",
@@ -2853,7 +2858,7 @@ export function SettingsPage() {
     email: "",
     phone: "",
     address: "",
-    role: "ADMIN",
+    role: assignableRoleOptions[0]?.value ?? "CLIENT",
     clientId: "",
     password: "",
     confirmPassword: "",
@@ -2898,7 +2903,7 @@ export function SettingsPage() {
         email: currentUser.email,
         phone: currentUser.phone ?? "",
         address: currentUser.address ?? "",
-        role: currentUser.role,
+        role: assignableRoleOptions[0]?.value ?? "CLIENT",
         clientId: currentUser.clientId ?? "",
         password: "",
         confirmPassword: "",
@@ -2916,9 +2921,6 @@ export function SettingsPage() {
       email: userForm.email,
       phone: userForm.phone || undefined,
       address: userForm.address || undefined,
-      role: userForm.role,
-      clientId:
-        userForm.role === "CLIENT" ? userForm.clientId || undefined : null,
       ...(userForm.password ? { password: userForm.password } : {}),
     });
   };
@@ -2957,49 +2959,6 @@ export function SettingsPage() {
               setUserForm((current) => ({ ...current, phone: value }))
             }
           />
-          <label className="block">
-            <span className="mono-label text-[color:var(--muted)]">Perfil</span>
-            <select
-              className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-              value={userForm.role}
-              onChange={(event) =>
-                setUserForm((current) => ({
-                  ...current,
-                  role: event.target.value,
-                }))
-              }
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {userForm.role === "CLIENT" ? (
-            <label className="block">
-              <span className="mono-label text-[color:var(--muted)]">
-                Cliente associado
-              </span>
-              <select
-                className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                value={userForm.clientId}
-                onChange={(event) =>
-                  setUserForm((current) => ({
-                    ...current,
-                    clientId: event.target.value,
-                  }))
-                }
-              >
-                <option value="">Selecione</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           <TextArea
             label="Endereco"
             value={userForm.address}
@@ -3046,58 +3005,60 @@ export function SettingsPage() {
         </form>
       </Panel>
 
-      <CrudPage<ApiUser>
-        title="Equipe e clientes"
-        subtitle="Usuarios associados a este admin. Funcionarios (Manager, Financial) e clientes com acesso ao portal."
-        queryKey="users"
-        endpoint="/users"
-        filterFn={(row) => row.id !== currentUser?.id}
-        columns={[
-          { key: "name", label: "Nome" },
-          { key: "email", label: "Email" },
-          {
-            key: "role",
-            label: "Papel",
-            render: (row) =>
-              roleOptions.find((o) => o.value === row.role)?.label ?? row.role,
-          },
-          {
-            key: "client",
-            label: "Cliente",
-            render: (row) => row.client?.name ?? "-",
-          },
-        ]}
-        fields={[
-          { name: "name", label: "Nome", required: true },
-          { name: "email", label: "Email", required: true },
-          { name: "password", label: "Senha", type: "password" },
-          {
-            name: "role",
-            label: "Papel",
-            type: "select",
-            options: roleOptions,
-          },
-          {
-            name: "clientId",
-            label: "Cliente associado",
-            type: "select",
-            options: clients.map((client) => ({
-              label: client.name,
-              value: client.id,
-            })),
-          },
-        ]}
-        normalize={(values, editing) => ({
-          name: values.name,
-          email: values.email,
-          role: values.role || "CLIENT",
-          clientId:
-            values.role === "CLIENT" ? values.clientId || undefined : null,
-          ...(editing || !values.password ? {} : { password: values.password }),
-        })}
-      />
+      {canManageUsers ? (
+        <CrudPage<ApiUser>
+          title="Equipe e clientes"
+          subtitle="Usuarios associados a este perfil. Funcionarios e clientes com acesso ao portal."
+          queryKey="users"
+          endpoint="/users"
+          filterFn={(row) => row.id !== currentUser?.id}
+          columns={[
+            { key: "name", label: "Nome" },
+            { key: "email", label: "Email" },
+            {
+              key: "role",
+              label: "Papel",
+              render: (row) =>
+                roleOptions.find((o) => o.value === row.role)?.label ?? row.role,
+            },
+            {
+              key: "client",
+              label: "Cliente",
+              render: (row) => row.client?.name ?? "-",
+            },
+          ]}
+          fields={[
+            { name: "name", label: "Nome", required: true },
+            { name: "email", label: "Email", required: true },
+            { name: "password", label: "Senha", type: "password" },
+            {
+              name: "role",
+              label: "Papel",
+              type: "select",
+              options: assignableRoleOptions,
+            },
+            {
+              name: "clientId",
+              label: "Cliente associado",
+              type: "select",
+              options: clients.map((client) => ({
+                label: client.name,
+                value: client.id,
+              })),
+            },
+          ]}
+          normalize={(values, editing) => ({
+            name: values.name,
+            email: values.email,
+            role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
+            clientId:
+              values.role === "CLIENT" ? values.clientId || undefined : null,
+            ...(editing || !values.password ? {} : { password: values.password }),
+          })}
+        />
+      ) : null}
 
-      <Panel className="p-6">
+      {canEditPreferences ? <Panel className="p-6">
         <div>
           <p className="mono-label text-[color:var(--muted)]">Sistema</p>
           <h2 className="mt-1 font-display text-2xl font-semibold">
@@ -3166,7 +3127,7 @@ export function SettingsPage() {
             Salvar configuracoes
           </Button>
         </form>
-      </Panel>
+      </Panel> : null}
     </div>
   );
 }
