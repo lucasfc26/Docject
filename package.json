@@ -1,0 +1,15 @@
+{
+  "name": "projectfy",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Projectfy SaaS monorepo",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w frontend",
+    "build": "npm run build -w frontend && npm run build -w backend",
+    "lint": "npm run lint -w frontend && npm run lint -w backend"
+  }
+}

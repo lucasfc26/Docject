@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Projectfy Financial Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "error": "#ffb4ab",
+                "surface-container-low": "#1c1b1c",
+                "on-primary-fixed": "#1a1c20",
+                "secondary-fixed": "#ffdbce",
+                "primary-container": "#0a0c10",
+                "primary-fixed-dim": "#c6c6cc",
+                "on-tertiary-container": "#178e00",
+                "on-primary-container": "#797a7f",
+                "surface-dim": "#141314",
+                "secondary-fixed-dim": "#ffb59a",
+                "on-secondary": "#5a1b00",
+                "surface": "#141314",
+                "outline-variant": "#45474b",
+                "outline": "#909095",
+                "on-secondary-fixed-variant": "#802a00",
+                "error-container": "#93000a",
+                "on-surface": "#e5e2e2",
+                "on-tertiary": "#053900",
+                "tertiary-fixed": "#79ff5b",
+                "primary-fixed": "#e2e2e8",
+                "tertiary-fixed-dim": "#2ae500",
+                "tertiary-container": "#011000",
+                "surface-container-high": "#2a2a2a",
+                "on-error-container": "#ffdad6",
+                "on-secondary-fixed": "#370e00",
+                "on-primary": "#2f3035",
+                "on-error": "#690005",
+                "tertiary": "#2ae500",
+                "on-primary-fixed-variant": "#45474b",
+                "surface-container-highest": "#353435",
+                "inverse-surface": "#e5e2e2",
+                "on-secondary-container": "#531900",
+                "on-tertiary-fixed": "#022100",
+                "inverse-primary": "#5d5e63",
+                "surface-variant": "#353435",
+                "inverse-on-surface": "#313030",
+                "surface-container": "#201f20",
+                "secondary-container": "#ff5e07",
+                "surface-bright": "#3a3939",
+                "on-tertiary-fixed-variant": "#095300",
+                "background": "#141314",
+                "secondary": "#ffb59a",
+                "on-surface-variant": "#c6c6cb",
+                "surface-container-lowest": "#0e0e0e",
+                "primary": "#c6c6cc",
+                "surface-tint": "#c6c6cc",
+                "on-background": "#e5e2e2"
+        },
+        "borderRadius": {
+                "DEFAULT": "1rem",
+                "lg": "2rem",
+                "xl": "3rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "gutter": "24px",
+                "stack-md": "24px",
+                "base": "8px",
+                "stack-lg": "48px",
+                "container-padding-desktop": "40px",
+                "stack-sm": "12px",
+                "container-padding-mobile": "20px",
+                "unit": "8px",
+                "section-gap": "48px"
+        },
+        "fontFamily": {
+                "headline-lg-mobile": [
+                        "Sora"
+                ],
+                "body-md": [
+                        "Sora"
+                ],
+                "body-lg": [
+                        "Sora"
+                ],
+                "label-sm": [
+                        "Sora"
+                ],
+                "headline-lg": [
+                        "Sora"
+                ],
+                "headline-md": [
+                        "Sora"
+                ]
+        },
+        "fontSize": {
+                "headline-lg-mobile": [
+                        "32px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "700"
+                        }
+                ],
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                        }
+                ],
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "1.6",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "1",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "1.1",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-md": [
+                        "32px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "600"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body {
+            background-color: #141314;
+            color: #e5e2e2;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.02);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .neon-glow-primary {
+            box-shadow: 0 0 15px rgba(198, 198, 204, 0.1);
+        }
+
+        .neon-text-primary {
+            text-shadow: 0 0 10px rgba(198, 198, 204, 0.2);
+        }
+
+        /* Subtle radial gradients for background depth */
+        .bg-glow-cyan {
+            background: radial-gradient(circle at top left, rgba(198, 198, 204, 0.03) 0%, transparent 40%);
+        }
+        
+        .bg-glow-purple {
+            background: radial-gradient(circle at bottom right, rgba(255, 94, 7, 0.03) 0%, transparent 40%);
+        }
+
+        /* Custom Scrollbar for data tables */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body class="font-body-md antialiased min-h-screen relative overflow-x-hidden">
+<!-- Background Depth Effects -->
+<div class="fixed inset-0 z-0 pointer-events-none bg-glow-cyan"></div>
+<div class="fixed inset-0 z-0 pointer-events-none bg-glow-purple"></div>
+<div class="flex h-screen overflow-hidden relative z-10">
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-full py-unit w-64 docked left-0 bg-surface-container-low/80 backdrop-blur-[20px] border-r border-white/5 shadow-xl z-20">
+<!-- Header -->
+<div class="px-gutter mb-8 flex items-center gap-4 pt-4">
+<img alt="Projectfy Premium User Avatar" class="w-10 h-10 rounded-full border border-primary/30" data-alt="A sleek, modern 3D rendered avatar of a futuristic project manager in a high-tech command center. High-key lighting, cyan and purple neon accents, ultra-dark aesthetic, hyper-realistic details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC-rnAj1fO8cjkoU5keV-bxYV7UFdUva15oEjW3X9nLWoQoXCjadrKp4nAStaEW7raftZKUPIdiJUi7SlwA_VLgbjj3WjnV0lfZQsUbOcnSZaN0eATUrHZVh9vbcuJmrYy0PGYSADSqO9u1w7gB6V2W5RxvBtdJ2K5Jm9kzw7QMiUVF9I2dmyxdHsieJGR9rD8ingGEoZOr0bRwl4OpxZ5GvdldSdkQQ3WTdamW7LDPP4gVxZyJVaxdVbOZyfz7xyV5jc_K808Pahs"/>
+<div>
+<h1 class="font-headline-md text-headline-md text-on-surface tracking-tighter text-2xl">Projectfy</h1>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Elite Tier</span>
+</div>
+</div>
+<!-- Main Tabs -->
+<div class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 rounded-r-full text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-r-full text-surface-container-lowest font-bold bg-primary shadow-sm Active: scale-95 transition-transform transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitoring</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-r-full text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span class="font-body-md text-body-md">Project Lab</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-r-full text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined">groups</span>
+<span class="font-body-md text-body-md">Team Hub</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-r-full text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-body-md text-body-md">Command Center</span>
+</a>
+</div>
+<!-- Footer & CTA -->
+<div class="px-4 mt-auto space-y-4 pb-4">
+<button class="w-full py-2 px-4 rounded-full bg-surface-container-high text-on-surface font-body-md text-body-md font-bold hover:bg-surface-container-highest transition-all border border-outline-variant">
+                    Upgrade to Ultra
+                </button>
+<div class="space-y-1">
+<a class="flex items-center gap-3 px-2 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-sm">verified_user</span>
+<span class="font-label-sm text-label-sm">Security</span>
+</a>
+<a class="flex items-center gap-3 px-2 py-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined text-sm">settings</span>
+<span class="font-label-sm text-label-sm">Settings</span>
+</a>
+</div>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto w-full relative">
+<!-- Mobile TopNavBar (Only visible on small screens) -->
+<header class="md:hidden flex justify-between items-center px-container-padding-mobile py-4 z-50 bg-surface-container/40 backdrop-blur-[40px] sticky top-0 border-b border-white/5 shadow-2xl shadow-black/50">
+<h1 class="font-headline-md text-headline-md font-bold text-on-surface">Projectfy</h1>
+<div class="flex items-center gap-4 text-on-surface">
+<span class="material-symbols-outlined">notifications</span>
+<img alt="User Profile" class="w-8 h-8 rounded-full border border-primary/30" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5bTRu_EDMFiQ5Rmur_6xsKVzL28z2ntvYTJzOVZoBTRD269PwH6dJV38iTJhyFEQPeogGFp-JTwVoQDon4G4X1VIczTLyoaYSmNPyOc4MuVdl94zHGKKQaBLQoEpFWxurAwQlpmVlgIcrTba1sZ5x6nFY9TQSuXyytDKTLzznHZEdxDwx2eTsAl3d8WtN2hZr96Zji1nHPQ4wt7R6xoNFtTezOrP2Zizb4ZVQ6hKCai-Ts-lOD8tba5UJlGzY0hbThfuKj9yoNyM"/>
+</div>
+</header>
+<div class="p-container-padding-mobile md:p-container-padding-desktop max-w-7xl mx-auto space-y-section-gap">
+<!-- Page Header & Filters -->
+<section class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mt-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Financial Analytics</h2>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Real-time precision metrics for active deployments.</p>
+</div>
+<div class="flex flex-wrap gap-3 w-full md:w-auto">
+<!-- Date Range Filter -->
+<div class="glass-panel rounded-full px-4 py-2 flex items-center gap-2 cursor-pointer hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">calendar_today</span>
+<span class="font-body-md text-body-md text-on-surface text-sm">Q3 2026</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">expand_more</span>
+</div>
+<!-- Entity Filter -->
+<div class="glass-panel rounded-full px-4 py-2 flex items-center gap-2 cursor-pointer hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-secondary-container text-sm">domain</span>
+<span class="font-body-md text-body-md text-on-surface text-sm">Alpha Core</span>
+<span class="material-symbols-outlined text-on-surface-variant text-sm">expand_more</span>
+</div>
+<!-- Action -->
+<button class="bg-surface-container-high border border-outline-variant hover:border-primary text-on-surface font-body-md text-body-md text-sm px-4 py-2 rounded-full flex items-center gap-2 transition-all">
+<span class="material-symbols-outlined text-sm">download</span>
+                            Export
+                        </button>
+</div>
+</section>
+<!-- Bento Grid Layout -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-6">
+<!-- KPI Widget: Total Revenue -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-4 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-primary">account_balance_wallet</span>
+</div>
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Total Revenue</h3>
+<div class="font-headline-lg text-headline-lg text-on-surface counter-animate" data-target="12450890">$0</div>
+<div class="mt-6 flex items-end justify-between">
+<div class="flex items-center gap-1 text-tertiary">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="font-label-sm text-label-sm">+14.2%</span>
+</div>
+<!-- Micro Sparkline placeholder -->
+<div class="h-8 w-24 flex items-end gap-1">
+<div class="w-full bg-tertiary/20 h-[30%] rounded-t-sm"></div>
+<div class="w-full bg-tertiary/40 h-[50%] rounded-t-sm"></div>
+<div class="w-full bg-tertiary/60 h-[70%] rounded-t-sm"></div>
+<div class="w-full bg-tertiary h-[90%] rounded-t-sm shadow-[0_0_10px_rgba(42,229,0,0.3)]"></div>
+</div>
+</div>
+</div>
+<!-- KPI Widget: Net Profit -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-4 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+<span class="material-symbols-outlined text-6xl text-secondary-container">query_stats</span>
+</div>
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Net Profit</h3>
+<div class="font-headline-lg text-headline-lg text-on-surface counter-animate" data-target="4890200">$0</div>
+<div class="mt-6 flex items-end justify-between">
+<div class="flex items-center gap-1 text-secondary-container">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span class="font-label-sm text-label-sm">+8.4%</span>
+</div>
+<!-- Micro Sparkline placeholder -->
+<div class="h-8 w-24 flex items-end gap-1">
+<div class="w-full bg-secondary-container/20 h-[40%] rounded-t-sm"></div>
+<div class="w-full bg-secondary-container/40 h-[45%] rounded-t-sm"></div>
+<div class="w-full bg-secondary-container/60 h-[60%] rounded-t-sm"></div>
+<div class="w-full bg-secondary-container h-[85%] rounded-t-sm shadow-[0_0_10px_rgba(255,94,7,0.3)]"></div>
+</div>
+</div>
+</div>
+<!-- Danger Widget: Overdue Alerts -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-4 border-l-2 border-l-error bg-error-container/5">
+<div class="flex justify-between items-start mb-4">
+<h3 class="font-label-sm text-label-sm text-error uppercase tracking-wider">Critical Alerts</h3>
+<span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+</div>
+<div class="space-y-4 mt-4">
+<div class="flex justify-between items-center pb-2 border-b border-white/5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<span class="font-body-md text-body-md text-sm text-on-surface">Invoice INV-892</span>
+</div>
+<span class="font-body-md text-body-md text-sm text-error font-bold">$45,000</span>
+</div>
+<div class="flex justify-between items-center pb-2 border-b border-white/5">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<span class="font-body-md text-body-md text-sm text-on-surface">Contractor Payout</span>
+</div>
+<span class="font-body-md text-body-md text-sm text-error font-bold">$12,400</span>
+</div>
+</div>
+</div>
+<!-- Main Chart Area -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-8 min-h-[400px] flex flex-col">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Income vs Expense Variance</h3>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-tertiary"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Income</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-full bg-secondary-container"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Expense</span>
+</div>
+</div>
+</div>
+<!-- Chart Visual Representation (CSS/HTML based abstract representation) -->
+<div class="flex-1 relative w-full mt-4 flex items-end">
+<!-- Y-Axis labels -->
+<div class="absolute left-0 top-0 h-full flex flex-col justify-between text-on-surface-variant font-label-sm text-label-sm pb-8">
+<span>$1.5M</span>
+<span>$1.0M</span>
+<span>$500K</span>
+<span>$0</span>
+</div>
+<!-- Grid Lines -->
+<div class="absolute left-12 right-0 top-0 h-full flex flex-col justify-between pb-8">
+<div class="w-full border-t border-white/5 h-0"></div>
+<div class="w-full border-t border-white/5 h-0"></div>
+<div class="w-full border-t border-white/5 h-0"></div>
+<div class="w-full border-t border-white/10 h-0"></div>
+</div>
+<!-- Data Points Area (Abstracted using flex containers and gradients) -->
+<div class="ml-12 w-full h-[calc(100%-2rem)] relative flex items-end justify-between px-4 pb-1">
+<!-- Month 1 -->
+<div class="w-8 relative h-full flex items-end justify-center group">
+<div class="absolute bottom-0 w-full h-[40%] bg-gradient-to-t from-secondary-container/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-0 w-full h-[60%] bg-gradient-to-t from-tertiary/20 to-transparent rounded-t-sm opacity-50"></div>
+<!-- Points -->
+<div class="absolute bottom-[40%] w-2 h-2 rounded-full bg-secondary-container shadow-[0_0_8px_#ff5e07] z-10"></div>
+<div class="absolute bottom-[60%] w-3 h-3 rounded-full bg-tertiary shadow-[0_0_12px_#2ae500] z-10"></div>
+</div>
+<!-- Month 2 -->
+<div class="w-8 relative h-full flex items-end justify-center">
+<div class="absolute bottom-0 w-full h-[35%] bg-gradient-to-t from-secondary-container/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-0 w-full h-[65%] bg-gradient-to-t from-tertiary/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-[35%] w-2 h-2 rounded-full bg-secondary-container z-10"></div>
+<div class="absolute bottom-[65%] w-3 h-3 rounded-full bg-tertiary z-10"></div>
+</div>
+<!-- Month 3 -->
+<div class="w-8 relative h-full flex items-end justify-center">
+<div class="absolute bottom-0 w-full h-[50%] bg-gradient-to-t from-secondary-container/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-0 w-full h-[45%] bg-gradient-to-t from-tertiary/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-[50%] w-2 h-2 rounded-full bg-secondary-container z-10"></div>
+<div class="absolute bottom-[45%] w-3 h-3 rounded-full bg-tertiary z-10"></div>
+</div>
+<!-- Month 4 -->
+<div class="w-8 relative h-full flex items-end justify-center">
+<div class="absolute bottom-0 w-full h-[45%] bg-gradient-to-t from-secondary-container/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-0 w-full h-[75%] bg-gradient-to-t from-tertiary/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-[45%] w-2 h-2 rounded-full bg-secondary-container z-10"></div>
+<div class="absolute bottom-[75%] w-3 h-3 rounded-full bg-tertiary shadow-[0_0_15px_#2ae500] z-10"></div>
+</div>
+<!-- Month 5 -->
+<div class="w-8 relative h-full flex items-end justify-center">
+<div class="absolute bottom-0 w-full h-[55%] bg-gradient-to-t from-secondary-container/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-0 w-full h-[85%] bg-gradient-to-t from-tertiary/20 to-transparent rounded-t-sm opacity-50"></div>
+<div class="absolute bottom-[55%] w-2 h-2 rounded-full bg-secondary-container z-10"></div>
+<div class="absolute bottom-[85%] w-3 h-3 rounded-full bg-tertiary shadow-[0_0_20px_#2ae500] z-10"></div>
+</div>
+</div>
+<!-- X-Axis Labels -->
+<div class="absolute bottom-0 left-12 right-0 flex justify-between px-4 text-on-surface-variant font-label-sm text-label-sm">
+<span>Jul</span>
+<span>Aug</span>
+<span>Sep</span>
+<span>Oct</span>
+<span>Nov</span>
+</div>
+</div>
+</div>
+<!-- Side Panel: Allocation / Donut -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-4 flex flex-col items-center justify-center relative">
+<h3 class="font-headline-md text-headline-md text-on-surface self-start w-full mb-8">Resource Allocation</h3>
+<!-- CSS Donut Chart representation -->
+<div class="relative w-48 h-48 rounded-full border-[16px] border-surface-container-high shadow-inner flex items-center justify-center" style="background: conic-gradient(#2ae500 0% 45%, #ff5e07 45% 75%, #45474b 75% 100%); border-color: transparent;">
+<div class="absolute inset-4 bg-surface rounded-full flex flex-col items-center justify-center shadow-none border-none">
+<span class="font-label-sm text-label-sm text-on-surface-variant">R&amp;D Cap</span>
+<span class="font-headline-md text-headline-md text-on-surface text-3xl">45%</span>
+</div>
+</div>
+<div class="w-full mt-8 space-y-3">
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-tertiary"></div>
+<span class="font-body-md text-body-md text-sm text-on-surface">R&amp;D Core</span>
+</div>
+<span class="font-body-md text-body-md text-sm text-on-surface-variant">45%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-secondary-container"></div>
+<span class="font-body-md text-body-md text-sm text-on-surface">Operations</span>
+</div>
+<span class="font-body-md text-body-md text-sm text-on-surface-variant">30%</span>
+</div>
+<div class="flex justify-between items-center">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-outline-variant"></div>
+<span class="font-body-md text-body-md text-sm text-on-surface">Marketing</span>
+</div>
+<span class="font-body-md text-body-md text-sm text-on-surface-variant">25%</span>
+</div>
+</div>
+</div>
+<!-- Transaction List -->
+<div class="glass-panel rounded-3xl p-6 col-span-1 md:col-span-12 overflow-x-auto">
+<div class="flex justify-between items-center mb-6 min-w-[600px]">
+<h3 class="font-headline-md text-headline-md text-on-surface">Recent Transactions</h3>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">search</span>
+<input class="bg-surface-container/50 border border-white/5 rounded-full py-2 pl-9 pr-4 text-on-surface font-body-md text-body-md text-sm focus:outline-none focus:border-outline focus:ring-1 focus:ring-outline/50 transition-all placeholder:text-outline-variant backdrop-blur-md" placeholder="Search ledger..." type="text"/>
+</div>
+</div>
+<table class="w-full text-left border-collapse min-w-[600px]">
+<thead>
+<tr class="border-b border-white/5 bg-white/[0.02]">
+<th class="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider rounded-tl-lg">ID</th>
+<th class="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Entity</th>
+<th class="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Date</th>
+<th class="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Amount</th>
+<th class="py-3 px-4 font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider rounded-tr-lg text-right">Status</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md text-sm">
+<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+<td class="py-4 px-4 text-outline">#TRX-9012</td>
+<td class="py-4 px-4 text-on-surface font-medium">Omega Corp Solutions</td>
+<td class="py-4 px-4 text-on-surface-variant">Nov 12, 2026</td>
+<td class="py-4 px-4 text-tertiary">+$145,000.00</td>
+<td class="py-4 px-4 text-right">
+<div class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/20">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span class="text-xs">Cleared</span>
+</div>
+</td>
+</tr>
+<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+<td class="py-4 px-4 text-outline">#TRX-9011</td>
+<td class="py-4 px-4 text-on-surface font-medium">AWS Infrastructure</td>
+<td class="py-4 px-4 text-on-surface-variant">Nov 11, 2026</td>
+<td class="py-4 px-4 text-on-surface-variant">-$24,500.00</td>
+<td class="py-4 px-4 text-right">
+<div class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/20">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span class="text-xs">Cleared</span>
+</div>
+</td>
+</tr>
+<tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors group">
+<td class="py-4 px-4 text-outline">#TRX-9010</td>
+<td class="py-4 px-4 text-on-surface font-medium">Global Logistics Inc</td>
+<td class="py-4 px-4 text-on-surface-variant">Nov 10, 2026</td>
+<td class="py-4 px-4 text-error font-bold">-$89,200.00</td>
+<td class="py-4 px-4 text-right">
+<div class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-error-container/20 text-error border border-error/30">
+<span class="material-symbols-outlined text-[14px]">cancel</span>
+<span class="text-xs">Failed</span>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="py-4 px-4 text-outline rounded-bl-lg">#TRX-9009</td>
+<td class="py-4 px-4 text-on-surface font-medium">Nexus Design Studio</td>
+<td class="py-4 px-4 text-on-surface-variant">Nov 09, 2026</td>
+<td class="py-4 px-4 text-on-surface-variant">-$12,000.00</td>
+<td class="py-4 px-4 text-right rounded-br-lg">
+<div class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-surface-container-highest text-on-surface border border-outline-variant">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+<span class="text-xs">Pending</span>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+</main>
+</div>
+<script>
+        // Simple counter animation for KPI widgets
+        document.addEventListener('DOMContentLoaded', () => {
+            const counters = document.querySelectorAll('.counter-animate');
+            const speed = 200; // Lower is faster
+
+            counters.forEach(counter => {
+                const animate = () => {
+                    const target = +counter.getAttribute('data-target');
+                    // Remove formatting chars if any existed in current text, parse to int
+                    const count = +counter.innerText.replace(/[^0-9]/g, '');
+                    const inc = target / speed;
+
+                    if (count < target) {
+                        // Format as currency
+                        counter.innerText = '$' + Math.ceil(count + inc).toLocaleString();
+                        setTimeout(animate, 10);
+                    } else {
+                        counter.innerText = '$' + target.toLocaleString();
+                    }
+                };
+                animate();
+            });
+        });
+    </script>
+</body></html>

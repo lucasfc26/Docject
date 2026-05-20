@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Projectfy - Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&amp;family=Geist:wght@400&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "on-secondary-fixed-variant": "#6d3a00",
+                "error-container": "#93000a",
+                "on-surface": "#e5e3d7",
+                "on-tertiary": "#00391d",
+                "tertiary-fixed": "#5affa1",
+                "primary-fixed": "#e1e0ff",
+                "tertiary-fixed-dim": "#31e287",
+                "tertiary-container": "#000f05",
+                "surface-container-high": "#2a2a23",
+                "surface": "#14140d",
+                "on-secondary": "#4c2700",
+                "outline-variant": "#46464f",
+                "outline": "#918f9a",
+                "surface-dim": "#14140d",
+                "secondary-fixed-dim": "#ffb77b",
+                "error": "#ffb4ab",
+                "surface-container-low": "#1c1c15",
+                "secondary-fixed": "#ffdcc2",
+                "primary-container": "#01003f",
+                "on-primary-fixed": "#11134d",
+                "primary-fixed-dim": "#bfc1ff",
+                "on-tertiary-container": "#008c4f",
+                "on-primary-container": "#7275b2",
+                "secondary": "#ffb77b",
+                "on-surface-variant": "#c7c5d1",
+                "surface-container-lowest": "#0e0f08",
+                "primary": "#bfc1ff",
+                "surface-tint": "#bfc1ff",
+                "on-background": "#e5e3d7",
+                "surface-container": "#202019",
+                "surface-bright": "#3a3a32",
+                "secondary-container": "#e07d01",
+                "on-tertiary-fixed-variant": "#00522c",
+                "background": "#14140d",
+                "inverse-surface": "#e5e3d7",
+                "on-tertiary-fixed": "#00210e",
+                "on-secondary-container": "#4a2500",
+                "surface-variant": "#35352d",
+                "inverse-primary": "#565994",
+                "inverse-on-surface": "#313129",
+                "on-secondary-fixed": "#2e1500",
+                "on-error-container": "#ffdad6",
+                "on-primary": "#272a62",
+                "on-error": "#690005",
+                "tertiary": "#31e287",
+                "on-primary-fixed-variant": "#3e417a",
+                "surface-container-highest": "#35352d"
+        },
+        "borderRadius": {
+                "DEFAULT": "1rem",
+                "lg": "2rem",
+                "xl": "3rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "unit": "8px",
+                "container-padding-mobile": "1.5rem",
+                "gutter": "1.5rem",
+                "section-gap": "4rem",
+                "container-padding-desktop": "3rem"
+        },
+        "fontFamily": {
+                "body-md": [
+                        "Geist"
+                ],
+                "label-sm": [
+                        "JetBrains Mono"
+                ],
+                "headline-lg": [
+                        "Sora"
+                ],
+                "body-lg": [
+                        "Geist"
+                ],
+                "label-md": [
+                        "JetBrains Mono"
+                ],
+                "display-lg": [
+                        "Sora"
+                ],
+                "headline-md": [
+                        "Sora"
+                ]
+        },
+        "fontSize": {
+                "body-md": [
+                        "16px",
+                        {
+                                "lineHeight": "24px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "16px",
+                                "fontWeight": "500"
+                        }
+                ],
+                "headline-lg": [
+                        "32px",
+                        {
+                                "lineHeight": "40px",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "body-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "28px",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-md": [
+                        "14px",
+                        {
+                                "lineHeight": "20px",
+                                "fontWeight": "500"
+                        }
+                ],
+                "display-lg": [
+                        "48px",
+                        {
+                                "lineHeight": "56px",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "32px",
+                                "fontWeight": "600"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); overflow: hidden; }
+        .glass-panel { background: rgba(255, 255, 255, 0.02); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        
+        /* Custom Scrollbar for sleek dark mode */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body class="flex h-screen w-screen overflow-hidden selection:bg-primary/30 selection:text-primary relative">
+<!-- Ambient Light Accent -->
+<div class="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+<div class="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-secondary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+<!-- SideNavBar (Shared Component) -->
+<nav class="bg-surface/60 backdrop-blur-[20px] border-r border-white/5 bg-gradient-to-b from-white/5 to-transparent shadow-lg h-screen w-64 flex flex-col py-unit shrink-0 z-20">
+<!-- Header -->
+<div class="px-6 py-8 flex items-center gap-4 mb-4">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-primary/30 shadow-md shrink-0">
+<img alt="Projectfy Premium User Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuChv3HLJnz0S8BLzQKkm4ePcmtzth4JZ6QOIrt8jfT4trpCzS428xkf-1tlKkkfV1-Igm5RvnvUfn939DgI6eqKrxgSMWGJ_B5W5eNzg4fStNWA1qZ_zMAu-Ign-lG87c0syHaCdPYKBrMrNRq0YtkhnmQesDfunnKZyGRIZCqFCx1Ja6aXuLz7x4e01MLSlnmNpAkTZCJEsiy85EeKNMG2l6Wfihs5H05V6LQldBAkaFyME0TJbdbnA1p1mLxNi41JbGg3risB26o"/>
+</div>
+<div>
+<h1 class="font-display-lg text-display-lg text-primary tracking-tighter" style="font-size: 24px; line-height: 28px;">Projectfy</h1>
+<p class="font-label-sm text-label-sm text-secondary">Elite Tier</p>
+</div>
+</div>
+<!-- Main Navigation -->
+<div class="flex-1 overflow-y-auto px-4 space-y-2">
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span class="font-label-md text-label-md">Dashboard</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">monitoring</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</a>
+<!-- Active State -->
+<a class="flex items-center gap-3 px-4 py-3 text-primary font-bold bg-primary/10 shadow-sm rounded-r-full transition-transform scale-95 origin-left" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">biotech</span>
+<span class="font-label-md text-label-md">Project Lab</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">groups</span>
+<span class="font-label-md text-label-md">Team Hub</span>
+</a>
+<!-- Inactive -->
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">terminal</span>
+<span class="font-label-md text-label-md">Command Center</span>
+</a>
+</div>
+<!-- Footer / Secondary Nav -->
+<div class="px-4 mt-auto pt-6 border-t border-white/5 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">verified_user</span>
+<span class="font-label-md text-label-md">Security</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all duration-300 mb-4" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span class="font-label-md text-label-md">Settings</span>
+</a>
+<button class="w-full py-3 px-4 rounded-[24px] bg-gradient-to-r from-primary-container/80 to-secondary-container/80 text-on-primary font-label-md text-label-md font-bold shadow-md hover:shadow-lg transition-all duration-300">
+                Upgrade to Ultra
+            </button>
+</div>
+</nav>
+<!-- Main Workspace Area -->
+<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+<!-- Top App Bar / Breadcrumb / Progress -->
+<header class="h-16 border-b border-white/5 bg-surface/40 backdrop-blur-md flex items-center justify-between px-8 shrink-0 z-10">
+<div class="flex items-center gap-4 text-on-surface-variant">
+<span class="font-label-md text-label-md uppercase tracking-widest text-primary/70">Project Lab</span>
+<span class="material-symbols-outlined text-sm opacity-50">chevron_right</span>
+<span class="font-headline-md text-headline-md text-on-surface" style="font-size: 18px;">Quantum Rewrite Alpha</span>
+</div>
+<!-- Global Progress Bar -->
+<div class="flex items-center gap-4 w-1/3 max-w-md">
+<span class="font-label-sm text-label-sm text-primary">68%</span>
+<div class="flex-1 h-1.5 bg-surface-container-high rounded-full overflow-hidden relative">
+<div class="absolute top-0 left-0 h-full w-[68%] bg-gradient-to-r from-primary to-secondary rounded-full"></div>
+</div>
+<div class="flex -space-x-2">
+<img alt="Team member" class="w-6 h-6 rounded-full border border-surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDGr9vAw61P7V9tdF_WdiVajjDTfn7fzPTetLLSdNK-56OJj_7MOXJYEVvx8r-mKlKf3QCzVq7lbDwSHhy21oIINu81zNliuoXelHPe5KIypr0MaSVeDk_0QcgJbRSFf0KD4Q59HJZ8mdifu07pF8EgwzXtQ74b6A8ZY2PL3Fs1Q0aUGvwrz_hvy30_ecSmEOliOvg1ByYZUImjZbNHL78fyvvKKUMtBnBa2iFq0C2XWJ3DmyUlDt6t4D9zWeRNNMzs5-ruzEu8vqM"/>
+<img alt="Team member" class="w-6 h-6 rounded-full border border-surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzEbm59rsYMBzXRv5KrkXzFhJ8raIa4wfERuLVsD80aeAAooSOwWuRM4WxCRYjrE_HfFrQh-wOgkjGHgyQYA0IhBk90NR0x_elhWSwg9lOtC6vOawb3D72sBBnRzMIzCT0lZVYgQAiPkibT6R8P3EUs0QmsCZ0jM9j5u0rUlyXlHcbzo_arhoQVWZke236bZz3dNeCXZNaQkQlTppx_rDiGZ32vkTK90Vn-LvUlI8OrTdfdZVWS2jOsHfwtbX_4GzhSeKYsGwNSrY"/>
+<div class="w-6 h-6 rounded-full border border-surface bg-surface-container-highest flex items-center justify-center font-label-sm text-label-sm text-on-surface-variant text-[10px]">+3</div>
+</div>
+</div>
+</header>
+<!-- Split Pane Layout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- Contextual Nav (Modules inside Project Lab) -->
+<div class="w-48 border-r border-white/5 bg-surface-container-lowest/50 flex flex-col p-4 shrink-0 overflow-y-auto">
+<div class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-4 px-2">Views</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-2 px-2 py-2 rounded text-primary bg-primary/5 border border-primary/10" href="#">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">list_alt</span>
+<span class="font-label-md text-label-md">Tasks</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded text-on-surface-variant hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">view_timeline</span>
+<span class="font-label-md text-label-md">Timeline</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded text-on-surface-variant hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">description</span>
+<span class="font-label-md text-label-md">Docs</span>
+</a>
+<a class="flex items-center gap-2 px-2 py-2 rounded text-on-surface-variant hover:bg-white/5 transition-colors" href="#">
+<span class="material-symbols-outlined text-sm">account_balance_wallet</span>
+<span class="font-label-md text-label-md">Finance</span>
+</a>
+</nav>
+</div>
+<!-- Main Task Canvas -->
+<div class="flex-1 bg-surface-dim/80 overflow-y-auto p-8 flex flex-col gap-6 relative">
+<!-- Filter/Action Bar -->
+<div class="flex items-center justify-between glass-panel px-4 py-3 rounded-lg sticky top-0 z-10">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+<span class="font-label-sm text-label-sm">Filter</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">sort</span>
+<span class="font-label-sm text-label-sm">Sort</span>
+</button>
+</div>
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary px-4 py-1.5 rounded-full font-label-sm text-label-sm font-bold flex items-center gap-2 shadow-sm">
+<span class="material-symbols-outlined text-sm">add</span> New Task
+                    </button>
+</div>
+<!-- Group: In Progress -->
+<div>
+<h3 class="font-label-md text-label-md text-secondary uppercase tracking-widest mb-3 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                        In Progress
+                        <span class="text-surface-variant ml-2">2</span>
+</h3>
+<div class="space-y-2">
+<!-- Active Task Item (Selected) -->
+<div class="glass-panel p-4 rounded-xl border-l-2 border-l-tertiary bg-tertiary/5 hover:bg-tertiary/10 transition-colors cursor-pointer flex items-center gap-4">
+<button class="w-5 h-5 rounded border border-tertiary/50 flex items-center justify-center text-transparent hover:text-tertiary transition-colors">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</button>
+<div class="flex-1">
+<h4 class="font-body-md text-body-md text-on-surface font-medium">Refactor core routing engine</h4>
+<div class="flex items-center gap-3 mt-1 text-on-surface-variant font-label-sm text-label-sm">
+<span class="flex items-center gap-1 text-secondary"><span class="material-symbols-outlined text-[14px]">calendar_today</span> Today</span>
+<span class="w-1 h-1 rounded-full bg-surface-variant"></span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-xs text-secondary">High Priority</span>
+</div>
+</div>
+<img alt="Assignee" class="w-8 h-8 rounded-full border border-surface-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQoGfOT7ocwhf-TpwhxenduE8hg9Z2JhYvdMDE9OqLOFPA-LaQAmbSFlgpjYEswwuXGkJRxzgkWcg8wWhkv-BDWGqmaK7lMSrlPTnGJPjqp3ONnHuoiRFOZ0xXJ9WXUp41IitMBoOQGHmOe9SHDpjf2foeZIBsjpGPOI-e5msQ1QmnV11bq2RD40lslbDQisQ11p26yxWZvCInDvZ8dx03aGUE4c6qamXiFsYwzQIXUNiJNVomeOiCmzvhcbihUDXeN6W2S3d3QtQ"/>
+</div>
+<!-- Task Item -->
+<div class="glass-panel p-4 rounded-xl hover:bg-white/5 transition-colors cursor-pointer flex items-center gap-4">
+<button class="w-5 h-5 rounded border border-white/20 flex items-center justify-center text-transparent hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</button>
+<div class="flex-1">
+<h4 class="font-body-md text-body-md text-on-surface">Update API authentication specs</h4>
+<div class="flex items-center gap-3 mt-1 text-on-surface-variant font-label-sm text-label-sm">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> Tomorrow</span>
+<span class="w-1 h-1 rounded-full bg-surface-variant"></span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-xs">Backend</span>
+</div>
+</div>
+<img alt="Assignee" class="w-8 h-8 rounded-full border border-surface-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA50yYdO0m72KAQ8MdQBElZrwt9hB_UrissiQs6T5Ns08-i2goi20SneH4_auvX1OUvWlKOIUkE6VD1wgNbB1fTRwtR1akSh1AS1PkjmA0Ajcmsz4qXenAPPpUCZQIh4OeAmucNY2sFe7vE0TSO_y2DmZOby0F3mYiLUHIfen9obdPj1Ht6dnCnkcWbJPTvEbPEkhMSCr9aok8UluYm7lMfLI-wikMT5rKauMZA6Zs41ZJ_TDzcHvAByfYYaoxMQu3x-bX0TdhxYl4"/>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Panel (Detail View) -->
+<div class="w-96 border-l border-white/5 bg-surface-container-low/80 backdrop-blur-xl flex flex-col shrink-0 shadow-2xl z-20">
+<!-- Detail Header -->
+<div class="p-6 border-b border-white/5 flex items-start justify-between">
+<div>
+<div class="font-label-sm text-label-sm text-tertiary mb-2 flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">task_alt</span> TASK-1042
+                        </div>
+<h2 class="font-headline-md text-headline-md text-on-surface leading-tight">Refactor core routing engine</h2>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined">close_fullscreen</span>
+</button>
+</div>
+<!-- Detail Content -->
+<div class="flex-1 overflow-y-auto p-6 space-y-8">
+<!-- Meta Grid -->
+<div class="grid grid-cols-2 gap-4">
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Status</span>
+<div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-secondary/10 border border-secondary/20 text-secondary font-label-sm text-label-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span> In Progress
+                            </div>
+</div>
+<div>
+<span class="font-label-sm text-label-sm text-on-surface-variant block mb-1">Assignee</span>
+<div class="flex items-center gap-2">
+<img alt="Assignee" class="w-6 h-6 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCq5zYjgRTQrAeQt1GgNjKMWAO_NHpT_PxMp1lOxGY7vT5P0ms3GWpKVoWgDmGjc6kb1BhP0UIF_b_8mLbHPR6wLosvciylot67zdqw9Ke0g1SzUIXYWojGs6Q06B9yNJXgytOz1U8rRjP3XDSnLz_2969ZvalOOjBt0bRp7mKvaEwK3y8jhLGGSBwJjVQt7ikgOKNaKhvhELxTTMKq6wh3LlqYmZNsiFsgBT9OVji0gmY6AQCr1EIZrCsuDr1KXhYRiT9oO5r_HKU"/>
+<span class="font-label-md text-label-md text-on-surface">David Chen</span>
+</div>
+</div>
+</div>
+<!-- Description -->
+<div>
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-2">Description</h3>
+<p class="font-body-md text-body-md text-on-surface opacity-80 leading-relaxed">
+                            The current routing logic is causing latency spikes during peak load. We need to implement the new WebAssembly module to handle dynamic route resolution faster. Ensure backward compatibility with legacy endpoints.
+                        </p>
+</div>
+<!-- Subtasks/Checklist -->
+<div>
+<h3 class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-3">Checklist (1/3)</h3>
+<div class="space-y-2">
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-tertiary bg-tertiary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-[12px] text-tertiary">check</span>
+</div>
+<span class="font-body-md text-body-md text-on-surface-variant line-through">Audit existing route maps</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-outline-variant group-hover:border-tertiary transition-colors flex items-center justify-center"></div>
+<span class="font-body-md text-body-md text-on-surface">Integrate WASM binary</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<div class="w-4 h-4 rounded border border-outline-variant group-hover:border-tertiary transition-colors flex items-center justify-center"></div>
+<span class="font-body-md text-body-md text-on-surface">Run load test suite</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

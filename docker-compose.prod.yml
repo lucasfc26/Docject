@@ -1,0 +1,68 @@
+# Stack de produção do Projectfy — subdomínio dj.maselcorp.com.br
+# Sobe atrás do proxy reverso do host (Nginx/Caddy) sem conflito com outros sistemas.
+#
+# Uso:
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up --build -d
+
+services:
+  # ── Banco de dados ──────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: projectfy_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: projectfy
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: projectfy
+    volumes:
+      - projectfy_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U projectfy -d projectfy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - projectfy_net
+
+  # ── API NestJS ──────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: projectfy_backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://projectfy:${POSTGRES_PASSWORD}@postgres:5432/projectfy
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - projectfy_net
+
+  # ── Frontend React (Vite build + Nginx estático) ────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_URL: /api
+    container_name: projectfy_frontend
+    restart: unless-stopped
+    # Porta local isolada — o proxy reverso do host mapeia dj.maselcorp.com.br → 127.0.0.1:8082
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-8082}:80"
+    depends_on:
+      - backend
+    networks:
+      - projectfy_net
+
+networks:
+  projectfy_net:
+    driver: bridge
+
+volumes:
+  projectfy_pgdata:

@@ -1,0 +1,59 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://projectfy:projectfy@postgres:5432/projectfy
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: local-dev-secret
+      JWT_REFRESH_SECRET: local-dev-refresh-secret
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    command: sh -c "until npx prisma db push; do sleep 2; done; npx prisma generate; npm run dev"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: projectfy
+      POSTGRES_PASSWORD: projectfy
+      POSTGRES_DB: projectfy
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8090:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres-data:
