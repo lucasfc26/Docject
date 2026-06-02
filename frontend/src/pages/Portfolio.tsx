@@ -8,6 +8,9 @@ import {
   Clock,
   Download,
   Edit3,
+  ExternalLink,
+  Eye,
+  FileSignature,
   Filter,
   Focus,
   GripVertical,
@@ -15,6 +18,7 @@ import {
   Paperclip,
   Plus,
   Save,
+  Send,
   Trash2,
   X,
 } from "lucide-react";
@@ -23,15 +27,19 @@ import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import {
   apiDelete,
+  apiAssetUrl,
+  downloadApiAsset,
   apiGet,
   apiPatch,
   apiPost,
+  apiUploadContractPdf,
   type ApiAppointment,
   type ApiClient,
   type ApiContract,
   type ApiProject,
   type ApiResource,
   type ApiService,
+  type ApiServiceHealthCheck,
   type ApiSettings,
   type ApiTransaction,
   type ApiUser,
@@ -82,9 +90,7 @@ type PaymentForm = {
 type ServiceForm = {
   name: string;
   description: string;
-  frontendHealth: string;
-  backendHealth: string;
-  databaseHealth: string;
+  healthChecks: ApiServiceHealthCheck[];
   notes: string;
   clientId: string;
   monthlyValue: string;
@@ -156,6 +162,11 @@ export function ClientsPage() {
           render: (row) => row.document || "-",
         },
         {
+          key: "cpf",
+          label: "CPF",
+          render: (row) => row.cpf || "-",
+        },
+        {
           key: "projects",
           label: "Projetos e Servicos",
           render: (row) =>
@@ -166,6 +177,7 @@ export function ClientsPage() {
         { name: "name", label: "Nome", required: true },
         { name: "segment", label: "Segmento" },
         { name: "document", label: "CPF/CNPJ" },
+        { name: "cpf", label: "CPF" },
         {
           name: "health",
           label: "Saude",
@@ -177,6 +189,7 @@ export function ClientsPage() {
         name: values.name,
         segment: values.segment || undefined,
         document: values.document || undefined,
+        cpf: values.cpf || undefined,
         health: values.health || "STABLE",
       })}
     />
@@ -936,30 +949,35 @@ export function ContractsPage() {
     queryKey: ["contracts"],
     queryFn: () => apiGet<ApiContract[]>("/contracts"),
   });
+  const { data: users = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiGet<ApiUser[]>("/users"),
+  });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ApiContract | null>(null);
-  const [form, setForm] = useState({
-    title: "",
-    status: "DRAFT",
-    value: "0",
-    fileUrl: "",
-  });
+  const [form, setForm] = useState(defaultContractForm());
+  const [expandedContracts, setExpandedContracts] = useState<Record<string, boolean>>({});
+  const currentUserId = useMemo(() => readStoredUserId(), []);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
         title: form.title,
-        status: form.status,
         value: Number(form.value || 0),
+        contractingPartyId: form.contractingPartyId || null,
+        contractorId: form.contractorId || null,
+        witnessOneId: form.witnessOneId || null,
+        witnessTwoId: form.witnessTwoId || null,
       };
       const saved = editing
         ? await apiPatch<ApiContract>(`/contracts/${editing.id}`, payload)
         : await apiPost<ApiContract>("/contracts", payload);
-      if (form.fileUrl.trim()) {
+      if (form.file) {
+        const upload = await apiUploadContractPdf(form.file);
         const nextVersion = (saved.versions?.length ?? 0) + 1;
         await apiPost(`/contracts/${saved.id}/versions`, {
           version: nextVersion,
-          fileUrl: form.fileUrl.trim(),
+          fileUrl: upload.url,
         });
       }
       return saved;
@@ -968,25 +986,40 @@ export function ContractsPage() {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       setOpen(false);
       setEditing(null);
-      setForm({ title: "", status: "DRAFT", value: "0", fileUrl: "" });
+      setForm(defaultContractForm());
     },
     meta: { successMessage: "Contrato salvo com sucesso." },
   });
 
-  const removeMutation = useMutation({
-    mutationFn: (id: string) => apiDelete(`/contracts/${id}`),
+  const sendMutation = useMutation({
+    mutationFn: (id: string) => apiPost<ApiContract>(`/contracts/${id}/send`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
-    meta: { successMessage: "Contrato removido." },
+    meta: { successMessage: "Contrato enviado para assinatura." },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => apiPost<ApiContract>(`/contracts/${id}/cancel`, {}),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+    meta: { successMessage: "Contrato cancelado e arquivos removidos." },
+  });
+
+  const signMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      apiPost<ApiContract>(`/contracts/${id}/sign`, { password }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+    meta: { successMessage: "Contrato assinado com sucesso." },
   });
 
   const startEdit = (contract: ApiContract) => {
-    const latest = latestContractUrl(contract);
     setEditing(contract);
     setForm({
       title: contract.title,
-      status: contract.status,
       value: String(contract.value ?? 0),
-      fileUrl: latest ?? "",
+      contractingPartyId: contract.contractingPartyId ?? "",
+      contractorId: contract.contractorId ?? "",
+      witnessOneId: contract.witnessOneId ?? "",
+      witnessTwoId: contract.witnessTwoId ?? "",
+      file: null,
     });
     setOpen(true);
   };
@@ -999,7 +1032,7 @@ export function ContractsPage() {
           subtitle="Contratos com status, valor e arquivo para download."
           onCreate={() => {
             setEditing(null);
-            setForm({ title: "", status: "DRAFT", value: "0", fileUrl: "" });
+            setForm(defaultContractForm());
             setOpen(true);
           }}
         />
@@ -1010,9 +1043,10 @@ export function ContractsPage() {
         </div>
       ) : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[840px] border-collapse">
+        <table className="w-full min-w-[980px] border-collapse">
           <thead>
             <tr className="border-y border-[color:var(--line)] bg-[color:var(--panel-strong)]">
+              <th className="w-12 px-6 py-4" />
               <th className="mono-label px-6 py-4 text-left text-[color:var(--muted)]">
                 Contrato
               </th>
@@ -1038,7 +1072,7 @@ export function ContractsPage() {
               <tr>
                 <td
                   className="px-6 py-6 text-sm text-[color:var(--muted)]"
-                  colSpan={5}
+                  colSpan={6}
                 >
                   Carregando contratos...
                 </td>
@@ -1046,61 +1080,133 @@ export function ContractsPage() {
             ) : null}
             {contracts.map((contract) => {
               const latestUrl = latestContractUrl(contract);
+              const isExpanded = expandedContracts[contract.id];
+              const canSign = canCurrentUserSignContract(contract, currentUserId);
               return (
-                <tr
-                  className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
-                  key={contract.id}
-                >
-                  <td className="px-6 py-4 text-sm font-semibold">
-                    {contract.title}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    v
-                    {contract.versions?.[contract.versions.length - 1]
-                      ?.version ?? 1}
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    <StatusBadge tone={statusTone(contract.status)}>
-                      {translateContract(contract.status)}
-                    </StatusBadge>
-                  </td>
-                  <td className="px-6 py-4 text-sm">
-                    {money(Number(contract.value))}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex justify-end gap-2">
-                      {latestUrl ? (
-                        <Button
-                          variant="secondary"
-                          onClick={() =>
-                            window.open(
-                              latestUrl,
-                              "_blank",
-                              "noopener,noreferrer",
-                            )
-                          }
-                        >
-                          <Download size={16} />
-                          Download
-                        </Button>
-                      ) : null}
+                <Fragment key={contract.id}>
+                  <tr
+                    className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
+                  >
+                    <td className="px-6 py-4">
                       <Button
-                        variant="secondary"
-                        onClick={() => startEdit(contract)}
-                      >
-                        <Edit3 size={16} />
-                        Editar
-                      </Button>
-                      <Button
+                        aria-label={isExpanded ? "Recolher assinaturas" : "Expandir assinaturas"}
+                        className="h-9 min-h-9 w-9 px-0"
                         variant="ghost"
-                        onClick={() => removeMutation.mutate(contract.id)}
+                        onClick={() =>
+                          setExpandedContracts((current) => ({
+                            ...current,
+                            [contract.id]: !current[contract.id],
+                          }))
+                        }
                       >
-                        <Trash2 size={16} />
-                        Excluir
+                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                       </Button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-semibold">
+                      {contract.title}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      v
+                      {contract.versions?.[contract.versions.length - 1]
+                        ?.version ?? 1}
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      <StatusBadge tone={statusTone(contract.status)}>
+                        {translateContract(contract.status)}
+                      </StatusBadge>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {money(Number(contract.value))}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end gap-2">
+                        {latestUrl ? (
+                          <>
+                            <Button
+                              aria-label="Visualizar contrato"
+                              variant="secondary"
+                              onClick={() =>
+                                window.open(
+                                  contractFileUrl(latestUrl),
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                )
+                              }
+                            >
+                              <Eye size={16} />
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              onClick={() => downloadContract(latestUrl)}
+                            >
+                              <Download size={16} />
+                              Download
+                            </Button>
+                          </>
+                        ) : null}
+                        {isContractReadyToSend(contract) ? (
+                          <Button
+                            disabled={sendMutation.isPending}
+                            variant="secondary"
+                            onClick={() => sendMutation.mutate(contract.id)}
+                          >
+                            <Send size={16} />
+                            Enviar
+                          </Button>
+                        ) : null}
+                        {contract.status !== "CANCELLED" &&
+                        contract.status !== "SIGNED" ? (
+                          <Button
+                            disabled={cancelMutation.isPending}
+                            variant="ghost"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Deseja cancelar este contrato e apagar todos os arquivos referentes a ele?",
+                                )
+                              ) {
+                                cancelMutation.mutate(contract.id);
+                              }
+                            }}
+                          >
+                            <X size={16} />
+                            Cancelar
+                          </Button>
+                        ) : null}
+                        {canSign ? (
+                          <Button
+                            disabled={signMutation.isPending}
+                            variant="secondary"
+                            onClick={() => {
+                              const password = window.prompt("Digite sua senha para assinar este contrato:");
+                              if (password) signMutation.mutate({ id: contract.id, password });
+                            }}
+                          >
+                            <FileSignature size={16} />
+                            Assinar
+                          </Button>
+                        ) : null}
+                        {contract.status === "DRAFT" ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => startEdit(contract)}
+                          >
+                            <Edit3 size={16} />
+                            Editar
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded ? (
+                    <tr className="border-b border-[color:var(--line)] bg-[color:var(--panel-strong)]/60">
+                      <td />
+                      <td className="px-6 py-5" colSpan={5}>
+                        <ContractSignaturesPanel contract={contract} />
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               );
             })}
           </tbody>
@@ -1132,74 +1238,108 @@ export function ContractsPage() {
             >
               <TextInput
                 label="Titulo"
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
                 required
                 value={form.title}
                 onChange={(value) =>
                   setForm((current) => ({ ...current, title: value }))
                 }
               />
-              <label className="block">
+              <div className="block">
                 <span className="mono-label text-[color:var(--muted)]">
                   Status
                 </span>
-                <select
-                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                  value={form.status}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      status: event.target.value,
-                    }))
-                  }
-                >
-                  {contractStatusOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <div className="mt-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
+                  <StatusBadge tone={statusTone(editing?.status ?? "DRAFT")}>
+                    {translateContract(editing?.status ?? "DRAFT")}
+                  </StatusBadge>
+                </div>
+              </div>
               <TextInput
                 label="Valor"
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
                 type="number"
                 value={form.value}
                 onChange={(value) =>
                   setForm((current) => ({ ...current, value }))
                 }
               />
-              <TextInput
-                label="Link do contrato"
-                value={form.fileUrl}
+              <ContractUserSelect
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
+                label="Contratante"
+                users={users}
+                value={form.contractingPartyId}
                 onChange={(value) =>
-                  setForm((current) => ({ ...current, fileUrl: value }))
+                  setForm((current) => ({ ...current, contractingPartyId: value }))
+                }
+              />
+              <ContractUserSelect
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
+                label="Contratado"
+                users={users}
+                value={form.contractorId}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, contractorId: value }))
+                }
+              />
+              <ContractUserSelect
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
+                label="Testemunha 1"
+                users={users}
+                value={form.witnessOneId}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, witnessOneId: value }))
+                }
+              />
+              <ContractUserSelect
+                disabled={Boolean(editing && editing.status !== "DRAFT")}
+                label="Testemunha 2"
+                users={users}
+                value={form.witnessTwoId}
+                onChange={(value) =>
+                  setForm((current) => ({ ...current, witnessTwoId: value }))
                 }
               />
               <label className="block md:col-span-2">
                 <span className="mono-label text-[color:var(--muted)]">
-                  Anexo
+                  Anexo PDF
                 </span>
                 <div className="mt-2 flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
                   <Paperclip size={17} className="text-[color:var(--muted)]" />
                   <input
                     className="min-w-0 flex-1 text-sm"
+                    accept="application/pdf,.pdf"
+                    disabled={Boolean(editing && editing.status !== "DRAFT")}
                     type="file"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = () =>
-                        setForm((current) => ({
-                          ...current,
-                          fileUrl: String(reader.result ?? ""),
-                        }));
-                      reader.readAsDataURL(file);
+                      if (file.type !== "application/pdf") {
+                        event.currentTarget.value = "";
+                        setForm((current) => ({ ...current, file: null }));
+                        window.alert("Envie apenas arquivos PDF.");
+                        return;
+                      }
+                      setForm((current) => ({ ...current, file }));
                     }}
                   />
                 </div>
+                {form.file ? (
+                  <p className="mt-2 text-xs text-[color:var(--muted)]">
+                    {form.file.name}
+                  </p>
+                ) : editing && latestContractUrl(editing) ? (
+                  <p className="mt-2 text-xs text-[color:var(--muted)]">
+                    Sem novo arquivo selecionado. O PDF atual sera mantido.
+                  </p>
+                ) : null}
               </label>
               <Button
                 className="md:col-span-2"
-                disabled={saveMutation.isPending}
+                disabled={
+                  saveMutation.isPending ||
+                  Boolean(editing && editing.status !== "DRAFT")
+                }
                 type="submit"
               >
                 <Save size={17} />
@@ -1210,6 +1350,107 @@ export function ContractsPage() {
         </div>
       </ModalOverlay>
     </Panel>
+  );
+}
+
+function ContractSignaturesPanel({ contract }: { contract: ApiContract }) {
+  const participants = contractParticipants(contract);
+  const logs = contract.signatureLogs ?? [];
+  return (
+    <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-3">
+        <p className="mono-label text-[color:var(--muted)]">Participantes</p>
+        {participants.map((participant) => (
+          <div
+            className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
+            key={participant.label}
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-[color:var(--muted)]">{participant.label}</p>
+              <p className="truncate font-semibold">{participant.user?.name ?? "Conta nao vinculada"}</p>
+              <p className="truncate text-xs text-[color:var(--muted)]">
+                {participant.user?.email ?? "-"} | CPF: {participant.user?.cpf ?? "-"}
+              </p>
+            </div>
+            <StatusBadge tone={participant.signedAt ? "success" : "warning"}>
+              {participant.signedAt ? "Assinado" : "Pendente"}
+            </StatusBadge>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-3">
+        <p className="mono-label text-[color:var(--muted)]">Logs</p>
+        {logs.length ? (
+          logs.map((log) => (
+            <div
+              className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 text-sm"
+              key={log.id}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">{log.role} - {log.signerName}</p>
+                  <p className="truncate text-xs text-[color:var(--muted)]">
+                    CPF: {log.signerCpf ?? "-"} | IP: {log.ipAddress ?? "-"}
+                  </p>
+                </div>
+                <span className="text-xs text-[color:var(--muted)]">
+                  {formatDateTime(log.signedAt)}
+                </span>
+              </div>
+              <p className="mt-3 truncate font-mono text-xs text-[color:var(--muted)]">
+                Token: {log.tokenHash ?? "-"}
+              </p>
+              <p className="mt-1 truncate font-mono text-xs text-[color:var(--muted)]">
+                Doc: {log.documentHash ?? "-"}
+              </p>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-dashed border-[color:var(--line)] px-4 py-5 text-sm text-[color:var(--muted)]">
+            Nenhuma assinatura registrada ainda.
+          </p>
+        )}
+        {contract.signedDocumentHash ? (
+          <p className="truncate font-mono text-xs text-[color:var(--muted)]">
+            Hash final: {contract.signedDocumentHash}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ContractUserSelect({
+  disabled,
+  label,
+  users,
+  value,
+  onChange,
+}: {
+  disabled?: boolean;
+  label: string;
+  users: ApiUser[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mono-label text-[color:var(--muted)]">{label}</span>
+      <select
+        className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none disabled:opacity-60"
+        disabled={disabled}
+        required
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Selecione</option>
+        {users.map((user) => (
+          <option key={user.id} value={user.id}>
+            {user.name} - {user.email}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -1238,9 +1479,7 @@ export function ServicesPage() {
       const payload = {
         name: form.name,
         description: form.description || undefined,
-        frontendHealth: form.frontendHealth,
-        backendHealth: form.backendHealth,
-        databaseHealth: form.databaseHealth,
+        healthChecks: cleanHealthChecks(form.healthChecks),
         notes: form.notes || undefined,
         ...(editing ? {} : { clientId: form.clientId }),
         monthlyValue: Number(form.monthlyValue || 0),
@@ -1291,9 +1530,7 @@ export function ServicesPage() {
     setForm({
       name: service.name,
       description: service.description ?? "",
-      frontendHealth: service.frontendHealth ?? "STABLE",
-      backendHealth: service.backendHealth ?? "STABLE",
-      databaseHealth: service.databaseHealth ?? "STABLE",
+      healthChecks: normalizeHealthChecks(service.healthChecks),
       notes: service.notes ?? "",
       clientId: service.clientId,
       monthlyValue: String(service.monthlyValue ?? 0),
@@ -1331,7 +1568,7 @@ export function ServicesPage() {
       ) : null}
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse">
+        <table className="w-full min-w-[1080px] border-collapse">
           <thead>
             <tr className="border-y border-[color:var(--line)] bg-[color:var(--panel-strong)]">
               <th className="mono-label px-6 py-4 text-left text-[color:var(--muted)]">
@@ -1350,6 +1587,9 @@ export function ServicesPage() {
                 Inicio
               </th>
               <th className="mono-label px-6 py-4 text-left text-[color:var(--muted)]">
+                Monitoramento
+              </th>
+              <th className="mono-label px-6 py-4 text-left text-[color:var(--muted)]">
                 Status
               </th>
               <th className="px-6 py-4 text-right">
@@ -1365,7 +1605,7 @@ export function ServicesPage() {
               <tr>
                 <td
                   className="px-6 py-6 text-sm text-[color:var(--muted)]"
-                  colSpan={7}
+                  colSpan={8}
                 >
                   Carregando servicos do banco...
                 </td>
@@ -1391,6 +1631,28 @@ export function ServicesPage() {
                 <td className="px-6 py-4 text-sm">Dia {service.paymentDay}</td>
                 <td className="px-6 py-4 text-sm">
                   {new Date(service.startDate).toLocaleDateString("pt-BR")}
+                </td>
+                <td className="px-6 py-4 text-sm">
+                  <div className="flex max-w-[260px] flex-wrap gap-2">
+                    {normalizeHealthChecks(service.healthChecks).length ? (
+                      normalizeHealthChecks(service.healthChecks).map((item) => (
+                        <a
+                          className="inline-flex items-center gap-1 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold transition hover:border-[color:var(--accent)]"
+                          href={healthCheckHref(item.address)}
+                          key={item.id ?? `${item.name}-${item.address}`}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {item.name}
+                          <ExternalLink size={12} />
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-xs text-[color:var(--muted)]">
+                        Sem pontos
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 text-sm">
                   <StatusBadge tone={service.active ? "success" : "neutral"}>
@@ -1421,7 +1683,7 @@ export function ServicesPage() {
               <tr>
                 <td
                   className="px-6 py-6 text-sm text-[color:var(--muted)]"
-                  colSpan={7}
+                  colSpan={8}
                 >
                   Nenhum servico cadastrado.
                 </td>
@@ -1514,69 +1776,104 @@ export function ServicesPage() {
                   setForm((current) => ({ ...current, startDate: value }))
                 }
               />
-              <label className="block">
-                <span className="mono-label text-[color:var(--muted)]">
-                  Saude do frontend
-                </span>
-                <select
-                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                  value={form.frontendHealth}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      frontendHealth: event.target.value,
-                    }))
-                  }
-                >
-                  {healthOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+              <div className="md:col-span-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="mono-label text-[color:var(--muted)]">
+                    Pontos de saude
+                  </span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() =>
+                      setForm((current) => ({
+                        ...current,
+                        healthChecks: [
+                          ...current.healthChecks,
+                          emptyHealthCheck(),
+                        ],
+                      }))
+                    }
+                  >
+                    <Plus size={16} />
+                    Adicionar
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-3">
+                  {form.healthChecks.map((item, index) => (
+                    <div
+                      className="grid gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-3 md:grid-cols-[1fr_1.4fr_auto]"
+                      key={item.id ?? index}
+                    >
+                      <TextInput
+                        label="Nome"
+                        value={item.name}
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            healthChecks: updateHealthCheck(
+                              current.healthChecks,
+                              index,
+                              { name: value },
+                            ),
+                          }))
+                        }
+                      />
+                      <TextInput
+                        label="IP, porta ou URL"
+                        value={item.address}
+                        onChange={(value) =>
+                          setForm((current) => ({
+                            ...current,
+                            healthChecks: updateHealthCheck(
+                              current.healthChecks,
+                              index,
+                              { address: value },
+                            ),
+                          }))
+                        }
+                      />
+                      <div className="flex items-end justify-end gap-2">
+                        {item.address ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            onClick={() =>
+                              window.open(
+                                healthCheckHref(item.address),
+                                "_blank",
+                                "noreferrer",
+                              )
+                            }
+                          >
+                            <ExternalLink size={16} />
+                          </Button>
+                        ) : null}
+                        <Button
+                          aria-label="Remover ponto de saude"
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setForm((current) => ({
+                              ...current,
+                              healthChecks: removeHealthCheck(
+                                current.healthChecks,
+                                index,
+                              ),
+                            }))
+                          }
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
+                    </div>
                   ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mono-label text-[color:var(--muted)]">
-                  Saude do backend
-                </span>
-                <select
-                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                  value={form.backendHealth}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      backendHealth: event.target.value,
-                    }))
-                  }
-                >
-                  {healthOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mono-label text-[color:var(--muted)]">
-                  Saude do banco de dados
-                </span>
-                <select
-                  className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                  value={form.databaseHealth}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      databaseHealth: event.target.value,
-                    }))
-                  }
-                >
-                  {healthOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {!form.healthChecks.length ? (
+                    <p className="rounded-2xl border border-dashed border-[color:var(--line)] px-4 py-3 text-sm text-[color:var(--muted)]">
+                      Nenhum ponto cadastrado para verificacao.
+                    </p>
+                  ) : null}
+                </div>
+              </div>
               <label className="flex min-h-20 items-center gap-2">
                 <input
                   checked={form.active}
@@ -1634,9 +1931,7 @@ function defaultServiceForm(clientId = ""): ServiceForm {
   return {
     name: "",
     description: "",
-    frontendHealth: "STABLE",
-    backendHealth: "STABLE",
-    databaseHealth: "STABLE",
+    healthChecks: [emptyHealthCheck()],
     notes: "",
     clientId,
     monthlyValue: "",
@@ -1649,6 +1944,63 @@ function defaultServiceForm(clientId = ""): ServiceForm {
 function clampPaymentDay(value: string) {
   const day = Math.max(1, Math.min(31, Number(value || 1)));
   return String(day);
+}
+
+function emptyHealthCheck(): ApiServiceHealthCheck {
+  return {
+    id: crypto.randomUUID(),
+    name: "",
+    address: "",
+  };
+}
+
+function normalizeHealthChecks(
+  checks: ApiService["healthChecks"],
+): ApiServiceHealthCheck[] {
+  if (!Array.isArray(checks)) return [];
+  return checks
+    .map((item) => ({
+      id: item.id || `${item.name}-${item.address}`,
+      name: String(item.name ?? ""),
+      address: String(item.address ?? ""),
+    }))
+    .filter((item) => item.name || item.address);
+}
+
+function cleanHealthChecks(
+  checks: ApiServiceHealthCheck[],
+): ApiServiceHealthCheck[] {
+  return checks
+    .map((item) => ({
+      id: item.id || crypto.randomUUID(),
+      name: item.name.trim(),
+      address: item.address.trim(),
+    }))
+    .filter((item) => item.name && item.address);
+}
+
+function updateHealthCheck(
+  checks: ApiServiceHealthCheck[],
+  index: number,
+  patch: Partial<ApiServiceHealthCheck>,
+) {
+  return checks.map((item, itemIndex) =>
+    itemIndex === index ? { ...item, ...patch } : item,
+  );
+}
+
+function removeHealthCheck(checks: ApiServiceHealthCheck[], index: number) {
+  return checks.filter((_, itemIndex) => itemIndex !== index);
+}
+
+function healthCheckHref(address: string) {
+  const value = address.trim();
+  if (!value) return "#";
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(value)) return value;
+  if (value.includes(":") || /^localhost(?:[:/]|$)/i.test(value) || /^\d{1,3}(?:\.\d{1,3}){3}(?::|\/|$)/.test(value)) {
+    return `http://${value}`;
+  }
+  return `https://${value}`;
 }
 
 export function FinancialPage() {
@@ -2942,6 +3294,7 @@ export function SettingsPage() {
   });
   const staffUsers = users.filter((u) => u.id !== currentUser?.id);
   const [settingsForm, setSettingsForm] = useState({
+    appName: "Docject",
     timezone: "America/Fortaleza",
     currency: "BRL",
     supportPhone: "",
@@ -2950,6 +3303,7 @@ export function SettingsPage() {
     name: "",
     email: "",
     phone: "",
+    cpf: "",
     address: "",
     role: assignableRoleOptions[0]?.value ?? "CLIENT",
     clientId: "",
@@ -2960,7 +3314,15 @@ export function SettingsPage() {
   const settingsMutation = useMutation({
     mutationFn: (payload: Record<string, unknown>) =>
       apiPatch<ApiSettings>("/settings", payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["settings"] }),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["settings"], saved);
+      setSettingsForm({
+        appName: saved.appName ?? "Docject",
+        timezone: saved.timezone ?? "America/Fortaleza",
+        currency: saved.currency ?? "BRL",
+        supportPhone: saved.supportPhone ?? "",
+      });
+    },
     meta: { successMessage: "Configuracoes salvas." },
   });
 
@@ -2969,10 +3331,33 @@ export function SettingsPage() {
       currentUser
         ? apiPatch<ApiUser>(`/users/${currentUser.id}`, payload)
         : apiPost<ApiUser>("/users", payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["users"] });
+    onSuccess: (saved) => {
+      queryClient.setQueryData<ApiUser[]>(["users"], (current) => {
+        if (!current) return [saved];
+        return current.some((user) => user.id === saved.id)
+          ? current.map((user) => (user.id === saved.id ? saved : user))
+          : [...current, saved];
+      });
+      if (storedUser.id === saved.id) {
+        localStorage.setItem(
+          "projectfy-user",
+          JSON.stringify({
+            ...storedUser,
+            id: saved.id,
+            name: saved.name,
+            email: saved.email,
+            role: saved.role,
+            clientId: saved.clientId,
+          }),
+        );
+      }
       setUserForm((current) => ({
         ...current,
+        name: saved.name,
+        email: saved.email,
+        phone: saved.phone ?? "",
+        cpf: saved.cpf ?? "",
+        address: saved.address ?? "",
         password: "",
         confirmPassword: "",
       }));
@@ -2983,6 +3368,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (settings)
       setSettingsForm({
+        appName: settings.appName ?? "Docject",
         timezone: settings.timezone,
         currency: settings.currency ?? "BRL",
         supportPhone: settings.supportPhone ?? "",
@@ -2995,6 +3381,7 @@ export function SettingsPage() {
         name: currentUser.name,
         email: currentUser.email,
         phone: currentUser.phone ?? "",
+        cpf: currentUser.cpf ?? "",
         address: currentUser.address ?? "",
         role: assignableRoleOptions[0]?.value ?? "CLIENT",
         clientId: currentUser.clientId ?? "",
@@ -3020,8 +3407,9 @@ export function SettingsPage() {
     userMutation.mutate({
       name: userForm.name,
       email: normalizeEmail(userForm.email),
-      phone: userForm.phone || undefined,
-      address: userForm.address || undefined,
+      phone: userForm.phone || null,
+      cpf: userForm.cpf || null,
+      address: userForm.address || null,
       ...(userForm.password ? { password: userForm.password } : {}),
     });
   };
@@ -3032,8 +3420,6 @@ export function SettingsPage() {
         <Toolbar
           title="Configuracoes"
           subtitle="Conta, acesso e preferencias globais."
-          onCreate={() => settingsMutation.mutate(settingsForm)}
-          createLabel="Salvar"
         />
         <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={saveUser}>
           <TextInput
@@ -3058,6 +3444,13 @@ export function SettingsPage() {
             value={userForm.phone}
             onChange={(value) =>
               setUserForm((current) => ({ ...current, phone: value }))
+            }
+          />
+          <TextInput
+            label="CPF"
+            value={userForm.cpf}
+            onChange={(value) =>
+              setUserForm((current) => ({ ...current, cpf: value }))
             }
           />
           <TextArea
@@ -3125,6 +3518,7 @@ export function SettingsPage() {
           columns={[
             { key: "name", label: "Nome" },
             { key: "email", label: "Email" },
+            { key: "cpf", label: "CPF", render: (row) => row.cpf || "-" },
             {
               key: "role",
               label: "Papel",
@@ -3140,6 +3534,7 @@ export function SettingsPage() {
           fields={[
             { name: "name", label: "Nome", required: true },
             { name: "email", label: "Email", required: true },
+            { name: "cpf", label: "CPF" },
             {
               name: "password",
               label: "Senha",
@@ -3165,6 +3560,7 @@ export function SettingsPage() {
           normalize={(values, editing) => ({
             name: values.name,
             email: normalizeEmail(values.email),
+            cpf: values.cpf || undefined,
             role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
             clientId:
               values.role === "CLIENT" ? values.clientId || undefined : null,
@@ -3184,9 +3580,23 @@ export function SettingsPage() {
           className="mt-6 grid gap-4 md:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault();
-            settingsMutation.mutate(settingsForm);
+            settingsMutation.mutate({
+              ...settingsForm,
+              supportPhone: settingsForm.supportPhone || null,
+            });
           }}
         >
+          <TextInput
+            label="Nome do app"
+            required
+            value={settingsForm.appName}
+            onChange={(value) =>
+              setSettingsForm((current) => ({
+                ...current,
+                appName: value,
+              }))
+            }
+          />
           <label className="block">
             <span className="mono-label text-[color:var(--muted)]">
               Timezone
@@ -3237,9 +3647,13 @@ export function SettingsPage() {
               }))
             }
           />
-          <Button className="md:col-span-2" type="submit">
+          <Button
+            className="md:col-span-2"
+            disabled={settingsMutation.isPending}
+            type="submit"
+          >
             <Save size={17} />
-            Salvar configuracoes
+            {settingsMutation.isPending ? "Salvando..." : "Salvar configuracoes"}
           </Button>
         </form>
       </Panel> : null}
@@ -3505,7 +3919,7 @@ function Toolbar({
 }: {
   title: string;
   subtitle: string;
-  onCreate: () => void;
+  onCreate?: () => void;
   onFilter?: () => void;
   createLabel?: string;
 }) {
@@ -3523,10 +3937,12 @@ function Toolbar({
             Filtros
           </Button>
         ) : null}
-        <Button onClick={onCreate} type="button">
-          <Plus size={17} />
-          {createLabel}
-        </Button>
+        {onCreate ? (
+          <Button onClick={onCreate} type="button">
+            <Plus size={17} />
+            {createLabel}
+          </Button>
+        ) : null}
       </div>
     </div>
   );
@@ -3818,7 +4234,76 @@ function translateContract(status: string) {
 }
 
 function latestContractUrl(contract: ApiContract) {
-  return contract.versions?.[contract.versions.length - 1]?.fileUrl;
+  return contract.signedFileUrl ?? contract.versions?.[contract.versions.length - 1]?.fileUrl;
+}
+
+function contractParticipants(contract: ApiContract) {
+  return [
+    { label: "Contratante", user: contract.contractingParty, signedAt: contract.contractingPartySignedAt },
+    { label: "Contratado", user: contract.contractor, signedAt: contract.contractorSignedAt },
+    { label: "Testemunha 1", user: contract.witnessOne, signedAt: contract.witnessOneSignedAt },
+    { label: "Testemunha 2", user: contract.witnessTwo, signedAt: contract.witnessTwoSignedAt },
+  ];
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("pt-BR");
+}
+
+function isContractReadyToSend(contract: ApiContract) {
+  const participantIds = [
+    contract.contractingPartyId,
+    contract.contractorId,
+    contract.witnessOneId,
+    contract.witnessTwoId,
+  ];
+  return Boolean(
+    contract.status === "DRAFT" &&
+      contract.title.trim() &&
+      Number(contract.value) > 0 &&
+      latestContractUrl(contract) &&
+      participantIds.every(Boolean) &&
+      new Set(participantIds).size === 4,
+  );
+}
+
+function canCurrentUserSignContract(contract: ApiContract, userId?: string) {
+  if (!userId || contract.status !== "SENT") return false;
+  if (contract.contractingPartyId === userId) return !contract.contractingPartySignedAt;
+  if (contract.contractorId === userId) return !contract.contractorSignedAt;
+  if (contract.witnessOneId === userId) return !contract.witnessOneSignedAt;
+  if (contract.witnessTwoId === userId) return !contract.witnessTwoSignedAt;
+  return false;
+}
+
+function readStoredUserId() {
+  try {
+    const raw = localStorage.getItem("projectfy-user");
+    return raw ? (JSON.parse(raw) as { id?: string }).id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function defaultContractForm() {
+  return {
+    title: "",
+    value: "0",
+    contractingPartyId: "",
+    contractorId: "",
+    witnessOneId: "",
+    witnessTwoId: "",
+    file: null as File | null,
+  };
+}
+
+function contractFileUrl(url: string) {
+  return apiAssetUrl(url);
+}
+
+function downloadContract(url: string) {
+  void downloadApiAsset(url);
 }
 
 function translateTransaction(status: string) {
@@ -4137,30 +4622,20 @@ function ScheduleEventCard({
     "border-l-[color:var(--primary)] bg-[color:var(--accent)]/18",
     "border-l-[color:var(--success)] bg-[color:var(--success)]/12",
   ];
-  const textTones = [
-    "text-[color:var(--warning)]",
-    "text-[color:var(--primary)] dark:text-[color:var(--accent)]",
-    "text-[color:var(--success)] dark:text-slate-300",
-  ];
-
   return (
     <button
-      className={`absolute z-20 rounded-r-xl border-l-4 p-1 text-left text-[10px] shadow-panel backdrop-blur-xl transition hover:scale-[1.01] sm:p-3 sm:text-sm ${tones[index % tones.length]}`}
+      className={`absolute z-20 overflow-hidden rounded-r-xl border-l-4 p-1.5 text-left text-[10px] shadow-panel backdrop-blur-xl transition hover:scale-[1.01] sm:p-2 sm:text-xs ${tones[index % tones.length]}`}
       style={{
-        left: `calc(${scheduleTimeColumnWidth} + ${dayIndex} * ${dayWidth})`,
+        left: `calc(${scheduleTimeColumnWidth} + ${dayIndex} * ${dayWidth} + 4px)`,
         top,
-        width: dayWidth,
+        width: `calc(${dayWidth} - 8px)`,
         height,
       }}
       onClick={() => onEdit(event)}
+      title={event.title}
       type="button"
     >
-      <p
-        className={`font-mono text-[10px] font-bold sm:text-xs ${textTones[index % textTones.length]}`}
-      >
-        {timeRangeLabel(event)}
-      </p>
-      <p className="mt-1 line-clamp-2 font-semibold leading-tight">
+      <p className="line-clamp-2 break-words font-semibold leading-tight">
         {event.title}
       </p>
       <p className="mt-1 truncate text-[10px] text-[color:var(--muted)] sm:text-xs">
@@ -4212,7 +4687,7 @@ function MonthCalendar({
           const muted = day.getMonth() !== currentDate.getMonth();
           return (
             <div
-              className={`min-h-28 border-b border-r border-[color:var(--line)] p-1.5 last:border-r-0 sm:min-h-32 sm:p-3 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
+              className={`min-h-28 min-w-0 overflow-hidden border-b border-r border-[color:var(--line)] p-1.5 last:border-r-0 sm:min-h-32 sm:p-3 ${muted ? "opacity-45" : ""} ${isSameDate(day, today) ? "bg-[color:var(--accent)]/10" : ""}`}
               key={day.toISOString()}
             >
               <button
@@ -4222,17 +4697,20 @@ function MonthCalendar({
               >
                 {day.getDate()}
               </button>
-              <div className="space-y-2">
+              <div className="space-y-1.5 overflow-hidden">
                 {dayEvents.slice(0, 3).map((event) => (
                   <button
-                    className="w-full rounded-xl border-l-4 border-l-[color:var(--primary)] bg-[color:var(--panel-strong)] px-2 py-1.5 text-left text-[10px] shadow-panel transition hover:-translate-y-0.5 dark:border-l-[color:var(--warning)] sm:px-3 sm:py-2 sm:text-xs"
+                    className="w-full min-w-0 overflow-hidden rounded-xl border-l-4 border-l-[color:var(--primary)] bg-[color:var(--panel-strong)] px-2 py-1.5 text-left text-[10px] shadow-panel transition hover:-translate-y-0.5 dark:border-l-[color:var(--warning)] sm:px-3 sm:py-2 sm:text-xs"
                     key={event.id}
                     onClick={() => onEdit(event)}
+                    title={event.title}
                     type="button"
                   >
-                    <p className="font-semibold">{event.title}</p>
-                    <p className="mt-1 text-[color:var(--muted)]">
-                      {timeRangeLabel(event)}
+                    <p className="line-clamp-2 break-words font-semibold leading-tight">
+                      {event.title}
+                    </p>
+                    <p className="mt-1 truncate text-[color:var(--muted)]">
+                      {event.client || event.location || "Docject"}
                     </p>
                   </button>
                 ))}

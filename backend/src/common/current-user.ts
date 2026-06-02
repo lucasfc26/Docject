@@ -34,7 +34,17 @@ export function serviceScope(user?: CurrentUser) {
 
 export function contractScope(user?: CurrentUser) {
   if (!user) return {};
-  if (user.role === "CLIENT") return { client: { users: { some: { id: user.sub } } } };
+  if (user.role === "CLIENT") {
+    return {
+      OR: [
+        { client: { users: { some: { id: user.sub } } } },
+        { contractingPartyId: user.sub },
+        { contractorId: user.sub },
+        { witnessOneId: user.sub },
+        { witnessTwoId: user.sub }
+      ]
+    };
+  }
   if (user.role === "ADMIN") return { OR: [{ client: { ownerId: user.sub } }, { clientId: null }] };
   return {};
 }

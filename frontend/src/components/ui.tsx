@@ -30,11 +30,12 @@ export function Panel({ className, ...props }: PanelProps) {
   return <section className={cn("glass-panel rounded-3xl", className)} {...props} />;
 }
 
-export function StatusBadge({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "success" | "warning" | "neutral" }) {
+export function StatusBadge({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "success" | "warning" | "danger" | "neutral" }) {
   const toneClass = {
     default: "border-[color:var(--accent)]/30 bg-[color:var(--accent)]/10 text-[color:var(--primary)] dark:text-[color:var(--accent)]",
     success: "border-mint-500/30 bg-mint-500/10 text-mint-600 dark:text-slate-300",
     warning: "border-ember-500/30 bg-ember-500/10 text-navy-800 dark:text-ember-400",
+    danger: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-300",
     neutral: "border-[color:var(--line)] bg-[color:var(--panel)] text-[color:var(--muted)]"
   }[tone];
 

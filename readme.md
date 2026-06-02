@@ -32,3 +32,20 @@ docker exec projectfy_backend npx prisma db push
 docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend
 
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+
+# não limpa dados
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod restart
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+# Caso atualize o DB Isso não limpa dados do banco. O db push só sincroniza o schema, adicionando as colunas novas.
+
+No VPS, rode:
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec backend npx prisma db push
+docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend frontend
+
+# confirmar se teve algum erro com alguma rota
+
+docker compose -f docker-compose.prod.yml --env-file .env.prod logs --tail=200 backend

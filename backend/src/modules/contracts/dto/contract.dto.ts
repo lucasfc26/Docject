@@ -16,6 +16,22 @@ export class CreateContractDto {
   @IsOptional()
   @IsString()
   clientId?: string;
+
+  @IsOptional()
+  @IsString()
+  contractingPartyId?: string;
+
+  @IsOptional()
+  @IsString()
+  contractorId?: string;
+
+  @IsOptional()
+  @IsString()
+  witnessOneId?: string;
+
+  @IsOptional()
+  @IsString()
+  witnessTwoId?: string;
 }
 
 export class UpdateContractDto {
@@ -35,6 +51,22 @@ export class UpdateContractDto {
   @IsOptional()
   @IsString()
   clientId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  contractingPartyId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  contractorId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  witnessOneId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  witnessTwoId?: string | null;
 }
 
 export class CreateContractVersionDto {
@@ -45,4 +77,14 @@ export class CreateContractVersionDto {
   @IsOptional()
   @IsString()
   fileUrl?: string;
+}
+
+export class SignContractDto {
+  @IsString()
+  password!: string;
+}
+
+export class ValidateContractDto {
+  @IsString()
+  code!: string;
 }

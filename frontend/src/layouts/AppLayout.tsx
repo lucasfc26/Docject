@@ -46,6 +46,7 @@ const titles: Record<string, string> = {
   "/resources": "Recursos",
   "/client/dashboard": "Portal do Cliente",
   "/settings": "Configuracoes",
+  "/mudar-senha": "Mudar senha",
 };
 
 type HeaderNotification = {
@@ -243,7 +244,7 @@ export function AppLayout() {
             ) : null}
 
             {profileOpen ? (
-              <div className="absolute right-0 top-14 z-40 w-64 rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel)] p-3 shadow-panel dark:shadow-panel-dark">
+              <div className="absolute right-0 top-14 z-40 w-64 rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-3 shadow-panel dark:shadow-panel-dark">
                 <div className="border-b border-[color:var(--line)] px-3 py-3">
                   <p className="font-semibold">{user?.name ?? "Admin"}</p>
                   <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
@@ -252,7 +253,10 @@ export function AppLayout() {
                 </div>
                 <button
                   className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]"
-                  onClick={() => navigate("/settings")}
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate("/settings");
+                  }}
                   type="button"
                 >
                   <UserRound size={17} />
@@ -260,7 +264,10 @@ export function AppLayout() {
                 </button>
                 <button
                   className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]"
-                  onClick={() => navigate("/settings")}
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate("/mudar-senha");
+                  }}
                   type="button"
                 >
                   <KeyRound size={17} />

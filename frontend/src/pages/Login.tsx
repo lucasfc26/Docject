@@ -154,12 +154,12 @@ export function Login() {
         </form>
 
         <div className="mt-7 flex items-center justify-between text-sm">
-          <a
+          <Link
             className="font-semibold text-[color:var(--primary)] dark:text-[color:var(--accent)]"
-            href="/forgot-password"
+            to="/forgot-password"
           >
             Recuperar acesso
-          </a>
+          </Link>
           <Link
             className="font-semibold text-[color:var(--primary)] dark:text-[color:var(--accent)]"
             to="/register"

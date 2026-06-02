@@ -37,6 +37,8 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       PORT: "3000"
+    volumes:
+      - projectfy_uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,3 +68,4 @@ networks:
 
 volumes:
   projectfy_pgdata:
+  projectfy_uploads:

@@ -1,4 +1,20 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+
+export class ServiceHealthCheckDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  id?: string;
+
+  @IsString()
+  @MaxLength(80)
+  name!: string;
+
+  @IsString()
+  @MaxLength(240)
+  address!: string;
+}
 
 export class CreateServiceDto {
   @IsString()
@@ -19,6 +35,13 @@ export class CreateServiceDto {
   @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
   databaseHealth?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceHealthCheckDto)
+  healthChecks?: ServiceHealthCheckDto[];
 
   @IsOptional()
   @IsString()
@@ -64,6 +87,13 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
   databaseHealth?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => ServiceHealthCheckDto)
+  healthChecks?: ServiceHealthCheckDto[];
 
   @IsOptional()
   @IsString()

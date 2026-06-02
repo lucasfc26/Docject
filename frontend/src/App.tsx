@@ -14,6 +14,8 @@ import { AppointmentsPage } from "./pages/AppointmentsPage";
 import { ResourcesPage } from "./pages/ResourcesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ClientPortal } from "./pages/ClientPortal";
+import { ContractValidation } from "./pages/ContractValidation";
+import { AccessRecovery, ResetPassword } from "./pages/AccessRecovery";
 import { TermosDeUso } from "./pages/TermosDeUso";
 import { PoliticaDePrivacidade } from "./pages/PoliticaDePrivacidade";
 import { Suporte } from "./pages/Suporte";
@@ -36,9 +38,13 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<AccessRecovery />} />
+        <Route path="/recuperar-acesso" element={<AccessRecovery />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/termos" element={<TermosDeUso />} />
         <Route path="/privacidade" element={<PoliticaDePrivacidade />} />
         <Route path="/suporte" element={<Suporte />} />
+        <Route path="/validar-contrato" element={<ContractValidation />} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clients" element={<ClientsPage />} />
@@ -52,6 +58,7 @@ export default function App() {
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/clients/dashboard" element={<ClientPortal />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/mudar-senha" element={<ResetPassword embedded />} />
         </Route>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
@@ -85,10 +92,10 @@ function readStoredUser() {
 }
 
 const allowedPathsByRole: Record<string, Set<string>> = {
-  ADMIN: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings"]),
-  MANAGER: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings"]),
-  FINANCIAL: new Set(["/dashboard", "/financial", "/settings"]),
-  CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/settings"]),
+  ADMIN: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
+  MANAGER: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
+  FINANCIAL: new Set(["/dashboard", "/financial", "/settings", "/mudar-senha"]),
+  CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/settings", "/mudar-senha"]),
 };
 
 const defaultPathByRole: Record<string, string> = {

@@ -17,6 +17,10 @@ export class CreateUserDto {
 
   @IsOptional()
   @IsString()
+  cpf?: string;
+
+  @IsOptional()
+  @IsString()
   address?: string;
 
   @IsString()
@@ -45,6 +49,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsString()
+  cpf?: string;
 
   @IsOptional()
   @IsString()

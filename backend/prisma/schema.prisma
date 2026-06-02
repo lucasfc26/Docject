@@ -42,6 +42,7 @@ model User {
   email         String         @unique
   name          String
   phone         String?
+  cpf           String?
   address       String?
   passwordHash  String
   role          UserRole       @default(MANAGER)
@@ -51,6 +52,11 @@ model User {
   admin         User?          @relation("AdminStaff", fields: [adminId], references: [id])
   adminId       String?
   staffUsers    User[]         @relation("AdminStaff")
+  contractsAsContractingParty Contract[] @relation("ContractContractingParty")
+  contractsAsContractor Contract[] @relation("ContractContractor")
+  contractsAsWitnessOne Contract[] @relation("ContractWitnessOne")
+  contractsAsWitnessTwo Contract[] @relation("ContractWitnessTwo")
+  signatureLogs ContractSignatureLog[]
   refreshTokens RefreshToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -72,6 +78,7 @@ model Client {
   segment   String?
   health    String          @default("STABLE")
   document  String?
+  cpf       String?
   revenue   Decimal         @default(0)
   owner     User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   ownerId   String?
@@ -136,15 +143,34 @@ model Milestone {
 }
 
 model Contract {
-  id        String         @id @default(uuid())
-  title     String
-  value     Decimal        @default(0)
-  status    ContractStatus @default(DRAFT)
-  client    Client?        @relation(fields: [clientId], references: [id])
-  clientId  String?
-  versions  ContractVersion[]
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id                 String         @id @default(uuid())
+  title              String
+  value              Decimal        @default(0)
+  status             ContractStatus @default(DRAFT)
+  client             Client?        @relation(fields: [clientId], references: [id])
+  clientId           String?
+  contractingParty   User?          @relation("ContractContractingParty", fields: [contractingPartyId], references: [id])
+  contractingPartyId String?
+  contractor         User?          @relation("ContractContractor", fields: [contractorId], references: [id])
+  contractorId       String?
+  witnessOne         User?          @relation("ContractWitnessOne", fields: [witnessOneId], references: [id])
+  witnessOneId       String?
+  witnessTwo         User?          @relation("ContractWitnessTwo", fields: [witnessTwoId], references: [id])
+  witnessTwoId       String?
+  contractingPartySignedAt DateTime?
+  contractorSignedAt DateTime?
+  witnessOneSignedAt DateTime?
+  witnessTwoSignedAt DateTime?
+  originalDocumentHash String?
+  signedDocumentHash String?
+  signedFileUrl       String?
+  validationCodeHash  String?
+  sentAt             DateTime?
+  cancelledAt        DateTime?
+  signatureLogs      ContractSignatureLog[]
+  versions           ContractVersion[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 }
 
 model ContractVersion {
@@ -153,6 +179,22 @@ model ContractVersion {
   fileUrl    String?
   contract   Contract @relation(fields: [contractId], references: [id])
   contractId String
+}
+
+model ContractSignatureLog {
+  id             String   @id @default(uuid())
+  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId     String
+  user           User?    @relation(fields: [userId], references: [id])
+  userId         String?
+  role           String
+  signerName     String
+  signerEmail    String?
+  signerCpf      String?
+  ipAddress      String?
+  tokenHash      String?
+  documentHash   String?
+  signedAt       DateTime @default(now())
 }
 
 model FinancialTransaction {
@@ -179,6 +221,7 @@ model Service {
   frontendHealth String                 @default("STABLE")
   backendHealth  String                 @default("STABLE")
   databaseHealth String                 @default("STABLE")
+  healthChecks   Json                   @default("[]")
   notes          String?
   monthlyValue   Decimal                @default(0)
   paymentDay     Int

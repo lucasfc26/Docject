@@ -1,20 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { Activity, Database, Download, MessageSquare, Monitor, ReceiptText, Server } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Activity, Download, ExternalLink, FileSignature, MessageSquare, ReceiptText, Server } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
-import { apiGet, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiSettings } from "../services/api";
+import { apiAssetUrl, apiGet, apiPost, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
+  const queryClient = useQueryClient();
   const { data: clients = [] } = useQuery({ queryKey: ["clients"], queryFn: () => apiGet<ApiClient[]>("/clients") });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => apiGet<ApiProject[]>("/projects") });
   const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => apiGet<ApiService[]>("/services") });
   const { data: contracts = [] } = useQuery({ queryKey: ["contracts"], queryFn: () => apiGet<ApiContract[]>("/contracts") });
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: () => apiGet<ApiSettings>("/settings") });
-  const [view, setView] = useState<"projects" | "services">("projects");
+  const [view, setView] = useState<"projects" | "services" | "contracts">("projects");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
+  const [selectedContractId, setSelectedContractId] = useState("");
   const user = readStoredUser();
   const isClientUser = user?.role === "CLIENT";
 
@@ -29,11 +31,25 @@ export function ClientPortal() {
     return services.filter((service) => service.clientId === selectedClient.id || service.client?.id === selectedClient.id);
   }, [services, selectedClient]);
   const selectedService = serviceOptions.find((service) => service.id === selectedServiceId) ?? serviceOptions[0];
+  const contractOptions = useMemo(() => {
+    if (isClientUser && user?.id) {
+      return contracts.filter((contract) => isContractParticipant(contract, user.id));
+    }
+    if (!selectedClient) return contracts;
+    return contracts.filter((contract) => contract.clientId === selectedClient.id || contract.client?.id === selectedClient.id);
+  }, [contracts, isClientUser, selectedClient, user?.id]);
+  const selectedContract = contractOptions.find((contract) => contract.id === selectedContractId) ?? contractOptions[0];
+  const { data: serviceHealth = [], isFetching: isCheckingHealth } = useQuery({
+    enabled: view === "services" && Boolean(selectedService?.id),
+    queryKey: ["service-health", selectedService?.id],
+    queryFn: () => apiGet<ApiServiceHealthCheckResult[]>(`/services/${selectedService?.id}/health-checks`),
+    refetchInterval: 30000,
+  });
   const selectedProgress = selectedProject ? projectProgress(selectedProject) : 0;
   const projectClient = selectedProject?.client?.name ?? selectedService?.client?.name ?? selectedClient?.name ?? "Cliente";
   const projectModules = useMemo(() => [...(selectedProject?.modules ?? [])].sort((a, b) => a.orderIndex - b.orderIndex), [selectedProject]);
   const currentModule = projectModules.find((module) => !isModuleCompleted(module)) ?? projectModules[projectModules.length - 1];
-  const contractUrl = contracts.find((contract) => contract.versions?.length)?.versions.at(-1)?.fileUrl;
+  const contractUrl = selectedContract?.signedFileUrl ?? selectedContract?.versions?.at(-1)?.fileUrl;
   const supportPhone = (settings?.supportPhone || "").replace(/\D/g, "");
   const visibleTimeline = selectedProject?.modules?.length
     ? projectModules.map((module) => ({
@@ -50,7 +66,7 @@ export function ClientPortal() {
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="mono-label text-[color:var(--muted)]">Portal do cliente</p>
-            <h1 className="mt-2 font-display text-4xl font-bold">{view === "projects" ? selectedProject?.name ?? "Projeto" : selectedService?.name ?? "Servico"}</h1>
+            <h1 className="mt-2 font-display text-4xl font-bold">{view === "projects" ? selectedProject?.name ?? "Projeto" : view === "services" ? selectedService?.name ?? "Servico" : selectedContract?.title ?? "Contratos"}</h1>
             <p className="mt-3 max-w-2xl text-[color:var(--muted)]">Resumo objetivo de progresso, servicos contratados, arquivos compartilhados, contratos e financeiro de {projectClient}.</p>
           </div>
           <div className={`grid w-full gap-3 ${isClientUser ? "md:grid-cols-[auto]" : "md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] xl:w-auto xl:min-w-[620px]"}`}>
@@ -63,6 +79,7 @@ export function ClientPortal() {
                   setSelectedClientId(event.target.value);
                   setSelectedProjectId("");
                   setSelectedServiceId("");
+                  setSelectedContractId("");
                 }}
               >
                 {clients.map((client) => (
@@ -73,19 +90,20 @@ export function ClientPortal() {
               </select>
             </label> : null}
             {!isClientUser ? <label className="block">
-              <span className="mono-label text-[color:var(--muted)]">{view === "projects" ? "Projeto" : "Servico"}</span>
-              <select className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none" value={view === "projects" ? selectedProject?.id ?? "" : selectedService?.id ?? ""} onChange={(event) => view === "projects" ? setSelectedProjectId(event.target.value) : setSelectedServiceId(event.target.value)}>
+              <span className="mono-label text-[color:var(--muted)]">{view === "projects" ? "Projeto" : view === "services" ? "Servico" : "Contrato"}</span>
+              <select className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none" value={view === "projects" ? selectedProject?.id ?? "" : view === "services" ? selectedService?.id ?? "" : selectedContract?.id ?? ""} onChange={(event) => view === "projects" ? setSelectedProjectId(event.target.value) : view === "services" ? setSelectedServiceId(event.target.value) : setSelectedContractId(event.target.value)}>
                 {view === "projects" && !projectOptions.length ? <option value="">Sem projetos</option> : null}
                 {view === "services" && !serviceOptions.length ? <option value="">Sem servicos</option> : null}
-                {(view === "projects" ? projectOptions : serviceOptions).map((item) => (
+                {view === "contracts" && !contractOptions.length ? <option value="">Sem contratos</option> : null}
+                {(view === "projects" ? projectOptions : view === "services" ? serviceOptions : contractOptions).map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name}
+                    {"name" in item ? item.name : item.title}
                   </option>
                 ))}
               </select>
             </label> : null}
             <div className="flex items-end gap-2">
-              <Button aria-label="Baixar contrato" variant="secondary" onClick={() => contractUrl && window.open(contractUrl, "_blank", "noopener,noreferrer")} disabled={!contractUrl}>
+              <Button aria-label="Baixar contrato" variant="secondary" onClick={() => contractUrl && window.open(apiAssetUrl(contractUrl), "_blank", "noopener,noreferrer")} disabled={!contractUrl}>
                 <Download size={17} />
               </Button>
               <Button aria-label="Suporte" onClick={() => supportPhone && window.open(`https://wa.me/${supportPhone}`, "_blank", "noopener,noreferrer")} disabled={!supportPhone}>
@@ -113,10 +131,29 @@ export function ClientPortal() {
           <Server size={17} />
           Servicos
         </Button>
+        <Button
+          type="button"
+          variant={view === "contracts" ? "primary" : "secondary"}
+          onClick={() => setView("contracts")}
+        >
+          <FileSignature size={17} />
+          Contratos
+        </Button>
       </div>
 
-      {view === "services" ? (
-        <ServiceClientView service={selectedService} clientName={projectClient} />
+      {view === "contracts" ? (
+        <ContractSignatureView
+          contract={selectedContract}
+          userId={user?.id}
+          onSigned={() => queryClient.invalidateQueries({ queryKey: ["contracts"] })}
+        />
+      ) : view === "services" ? (
+        <ServiceClientView
+          healthResults={serviceHealth}
+          isCheckingHealth={isCheckingHealth}
+          service={selectedService}
+          clientName={projectClient}
+        />
       ) : (
         <>
 
@@ -182,9 +219,13 @@ export function ClientPortal() {
 function ServiceClientView({
   service,
   clientName,
+  healthResults,
+  isCheckingHealth,
 }: {
   service?: ApiService;
   clientName: string;
+  healthResults: ApiServiceHealthCheckResult[];
+  isCheckingHealth: boolean;
 }) {
   if (!service) {
     return (
@@ -196,11 +237,14 @@ function ServiceClientView({
     );
   }
 
-  const healthItems = [
-    { label: "Frontend", value: service.frontendHealth ?? "STABLE", icon: Monitor },
-    { label: "Backend", value: service.backendHealth ?? "STABLE", icon: Server },
-    { label: "DB", value: service.databaseHealth ?? "STABLE", icon: Database },
-  ];
+  const healthItems = healthResults.length
+    ? healthResults
+    : (service.healthChecks ?? []).map((item) => ({
+        ...item,
+        status: "PENDING" as const,
+        responseTimeMs: null,
+        checkedAt: "",
+      }));
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -229,25 +273,53 @@ function ServiceClientView({
       </Panel>
 
       <Panel className="p-6">
-        <p className="mono-label text-[color:var(--muted)]">Saude operacional</p>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="mono-label text-[color:var(--muted)]">Saude operacional</p>
+          <span className="text-xs text-[color:var(--muted)]">
+            {isCheckingHealth ? "Verificando..." : "Atualiza a cada 30s"}
+          </span>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
           {healthItems.map((item) => {
-            const Icon = item.icon;
             return (
-              <div
-                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4"
-                key={item.label}
+              <a
+                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 transition hover:border-[color:var(--accent)]"
+                href={healthCheckHref(item.address)}
+                key={item.id ?? `${item.name}-${item.address}`}
+                rel="noreferrer"
+                target="_blank"
               >
                 <div className="mb-4 flex items-center justify-between">
-                  <Icon size={20} className="text-[color:var(--muted)]" />
-                  <StatusBadge tone={healthTone(item.value)}>
-                    {translateHealth(item.value)}
+                  <Activity size={20} className="text-[color:var(--muted)]" />
+                  <StatusBadge tone={healthTone(item.status)}>
+                    {translateHealth(item.status)}
                   </StatusBadge>
                 </div>
-                <p className="font-semibold">{item.label}</p>
-              </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+                      {item.address}
+                    </p>
+                    <p className="mt-3 text-sm text-[color:var(--muted)]">
+                      {item.responseTimeMs == null
+                        ? "Sem resposta medida"
+                        : `${item.responseTimeMs} ms`}
+                    </p>
+                  </div>
+                  <ExternalLink
+                    size={16}
+                    className="mt-1 shrink-0 text-[color:var(--muted)]"
+                  />
+                </div>
+              </a>
             );
           })}
+          {!healthItems.length ? (
+            <p className="rounded-2xl border border-dashed border-[color:var(--line)] px-4 py-5 text-sm text-[color:var(--muted)] md:col-span-2">
+              Nenhum ponto de saude cadastrado para este servico.
+            </p>
+          ) : null}
         </div>
         <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4">
           <p className="mono-label text-[color:var(--muted)]">Observacao</p>
@@ -260,10 +332,137 @@ function ServiceClientView({
   );
 }
 
+function ContractSignatureView({
+  contract,
+  userId,
+  onSigned,
+}: {
+  contract?: ApiContract;
+  userId?: string;
+  onSigned: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const signMutation = useMutation({
+    mutationFn: () => apiPost<ApiContract>(`/contracts/${contract?.id}/sign`, { password }),
+    onSuccess: () => {
+      setPassword("");
+      onSigned();
+    },
+    meta: { successMessage: "Contrato assinado com sucesso." },
+  });
+
+  if (!contract) {
+    return (
+      <Panel className="p-6">
+        <p className="text-sm text-[color:var(--muted)]">
+          Nenhum contrato vinculado a esta conta.
+        </p>
+      </Panel>
+    );
+  }
+
+  const latestUrl = contract.signedFileUrl ?? contract.versions?.at(-1)?.fileUrl;
+  const role = userId ? contractParticipantRole(contract, userId) : undefined;
+  const alreadySigned = userId ? hasSignedContract(contract, userId) : false;
+  const canSign = contract.status === "SENT" && Boolean(role) && !alreadySigned;
+  const participants = [
+    { label: "Contratante", user: contract.contractingParty, signedAt: contract.contractingPartySignedAt },
+    { label: "Contratado", user: contract.contractor, signedAt: contract.contractorSignedAt },
+    { label: "Testemunha 1", user: contract.witnessOne, signedAt: contract.witnessOneSignedAt },
+    { label: "Testemunha 2", user: contract.witnessTwo, signedAt: contract.witnessTwoSignedAt },
+  ];
+
+  return (
+    <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+      <Panel className="p-6">
+        <p className="mono-label text-[color:var(--muted)]">Contrato</p>
+        <h2 className="mt-2 font-display text-3xl font-bold">{contract.title}</h2>
+        <div className="mt-5 grid gap-3 text-sm">
+          <div className="flex items-center justify-between border-t border-[color:var(--line)] pt-4">
+            <span className="text-[color:var(--muted)]">Status</span>
+            <StatusBadge tone={contractStatusTone(contract.status)}>
+              {translateContract(contract.status)}
+            </StatusBadge>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[color:var(--muted)]">Valor</span>
+            <strong>{money(Number(contract.value ?? 0))}</strong>
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button
+            disabled={!latestUrl}
+            type="button"
+            variant="secondary"
+            onClick={() => latestUrl && window.open(apiAssetUrl(latestUrl), "_blank", "noopener,noreferrer")}
+          >
+            <Download size={17} />
+            Visualizar PDF
+          </Button>
+        </div>
+        {canSign ? (
+          <form
+            className="mt-5 grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              signMutation.mutate();
+            }}
+          >
+            <label className="block">
+              <span className="mono-label text-[color:var(--muted)]">Senha da conta</span>
+              <input
+                className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                required
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            <Button disabled={signMutation.isPending || !password} type="submit">
+              <FileSignature size={17} />
+              Assinar
+            </Button>
+          </form>
+        ) : null}
+      </Panel>
+
+      <Panel className="p-6">
+        <p className="mono-label text-[color:var(--muted)]">Assinaturas</p>
+        <div className="mt-5 grid gap-3">
+          {participants.map((participant) => (
+            <div
+              className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4"
+              key={participant.label}
+            >
+              <div className="min-w-0">
+                <p className="text-sm text-[color:var(--muted)]">{participant.label}</p>
+                <p className="truncate font-semibold">
+                  {participant.user?.name ?? "Conta nao vinculada"}
+                </p>
+                <p className="truncate text-xs text-[color:var(--muted)]">
+                  {participant.user?.email ?? "-"} | CPF: {participant.user?.cpf ?? "-"}
+                </p>
+              </div>
+              <StatusBadge tone={participant.signedAt ? "success" : "warning"}>
+                {participant.signedAt ? "Assinado" : "Pendente"}
+              </StatusBadge>
+            </div>
+          ))}
+        </div>
+        {role && alreadySigned ? (
+          <p className="mt-4 text-sm text-[color:var(--muted)]">
+            Sua assinatura ja foi registrada como {role}.
+          </p>
+        ) : null}
+      </Panel>
+    </div>
+  );
+}
+
 function readStoredUser() {
   try {
     const raw = localStorage.getItem("projectfy-user");
-    return raw ? (JSON.parse(raw) as { role: string; clientId?: string }) : null;
+    return raw ? (JSON.parse(raw) as { id: string; role: string; clientId?: string }) : null;
   } catch {
     return null;
   }
@@ -273,14 +472,64 @@ function translateProject(status: string) {
   return { PLANNING: "Planejamento", IN_PROGRESS: "Em andamento", PAUSED: "Pausado", WAITING_CLIENT: "Aguardando cliente", COMPLETED: "Concluido", CANCELLED: "Cancelado" }[status] ?? status;
 }
 
+function translateContract(status: string) {
+  return { DRAFT: "Rascunho", SENT: "Enviado", SIGNED: "Assinado", CANCELLED: "Cancelado" }[status] ?? status;
+}
+
+function contractStatusTone(status: string) {
+  if (status === "SIGNED") return "success";
+  if (status === "SENT" || status === "DRAFT") return "warning";
+  if (status === "CANCELLED") return "danger";
+  return "neutral";
+}
+
+function isContractParticipant(contract: ApiContract, userId: string) {
+  return [contract.contractingPartyId, contract.contractorId, contract.witnessOneId, contract.witnessTwoId].includes(userId);
+}
+
+function contractParticipantRole(contract: ApiContract, userId: string) {
+  if (contract.contractingPartyId === userId) return "contratante";
+  if (contract.contractorId === userId) return "contratado";
+  if (contract.witnessOneId === userId) return "testemunha 1";
+  if (contract.witnessTwoId === userId) return "testemunha 2";
+  return undefined;
+}
+
+function hasSignedContract(contract: ApiContract, userId: string) {
+  if (contract.contractingPartyId === userId) return Boolean(contract.contractingPartySignedAt);
+  if (contract.contractorId === userId) return Boolean(contract.contractorSignedAt);
+  if (contract.witnessOneId === userId) return Boolean(contract.witnessOneSignedAt);
+  if (contract.witnessTwoId === userId) return Boolean(contract.witnessTwoSignedAt);
+  return false;
+}
+
 function translateHealth(status: string) {
-  return { EXCELLENT: "Excelente", ATTENTION: "Atencao", STABLE: "Estavel" }[status] ?? status;
+  return {
+    EXCELLENT: "Excelente",
+    ATTENTION: "Atencao",
+    STABLE: "Estavel",
+    FAST: "Rapido",
+    SLOW: "Lento",
+    OFFLINE: "Offline",
+    PENDING: "Pendente",
+  }[status] ?? status;
 }
 
 function healthTone(status: string) {
-  if (status === "EXCELLENT") return "success";
-  if (status === "ATTENTION") return "warning";
+  if (status === "EXCELLENT" || status === "FAST") return "success";
+  if (status === "ATTENTION" || status === "SLOW" || status === "PENDING") return "warning";
+  if (status === "OFFLINE") return "danger";
   return "neutral";
+}
+
+function healthCheckHref(address: string) {
+  const value = address.trim();
+  if (!value) return "#";
+  if (/^[a-z][a-z\d+\-.]*:\/\//i.test(value)) return value;
+  if (value.includes(":") || /^localhost(?:[:/]|$)/i.test(value) || /^\d{1,3}(?:\.\d{1,3}){3}(?::|\/|$)/.test(value)) {
+    return `http://${value}`;
+  }
+  return `https://${value}`;
 }
 
 function money(value: number) {
