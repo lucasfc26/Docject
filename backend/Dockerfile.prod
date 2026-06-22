@@ -27,5 +27,6 @@ RUN npx prisma generate
 
 EXPOSE 3000
 
-# Executa as migrations pendentes e inicia o servidor
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Schema e atualizacoes de banco sao aplicados manualmente com:
+# docker compose exec backend npx prisma db push
+CMD ["node", "dist/main.js"]
