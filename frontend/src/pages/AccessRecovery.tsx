@@ -1,10 +1,10 @@
 import { FormEvent, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { ArrowLeft, ArrowRight, KeyRound, Lock, Mail } from "lucide-react";
+import { ArrowLeft, ArrowRight, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { Button, Panel } from "../components/ui";
-import { requestPasswordReset, resetPassword } from "../services/api";
+import { changePassword, requestPasswordReset, resetPassword } from "../services/api";
 
 const passwordRuleMessage =
   "A senha deve ter no minimo 6 caracteres e pelo menos um caractere especial.";
@@ -20,8 +20,8 @@ export function AccessRecovery() {
     setLoading(true);
     try {
       const result = await requestPasswordReset(email);
-      toast.success("Acesso localizado. Defina uma nova senha.");
-      navigate(`/reset-password?email=${encodeURIComponent(result.email || email)}`);
+      toast.success(result.message);
+      navigate(`/reset-password?email=${encodeURIComponent(email.trim().toLowerCase())}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Nao foi possivel recuperar o acesso.");
     } finally {
@@ -31,6 +31,9 @@ export function AccessRecovery() {
 
   return (
     <AuthShell eyebrow="Recuperar acesso" title="Informe seu email cadastrado">
+      <p className="mb-5 text-sm text-[color:var(--muted)]">
+        Enviaremos um codigo de 6 digitos por e-mail. Ele expira em 1 hora e so pode ser usado uma vez.
+      </p>
       <form className="space-y-5" onSubmit={submit}>
         <label className="block">
           <span className="mono-label text-[color:var(--muted)]">Email</span>
@@ -46,7 +49,7 @@ export function AccessRecovery() {
           </div>
         </label>
         <Button className="w-full py-3 text-base" disabled={loading} type="submit">
-          {loading ? "Verificando..." : "Continuar"}
+          {loading ? "Enviando codigo..." : "Enviar codigo"}
           <ArrowRight size={18} />
         </Button>
       </form>
@@ -60,6 +63,8 @@ export function ResetPassword({ embedded = false }: { embedded?: boolean }) {
   const [searchParams] = useSearchParams();
   const storedEmail = useMemo(() => readStoredUserEmail(), []);
   const [email, setEmail] = useState(searchParams.get("email") ?? storedEmail ?? "");
+  const [code, setCode] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -67,13 +72,18 @@ export function ResetPassword({ embedded = false }: { embedded?: boolean }) {
   const passwordValid =
     !password ||
     (password.length >= 6 && passwordSpecialCharacterPattern.test(password));
+  const codeValid = embedded || /^\d{6}$/.test(code);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!passwordsMatch || !passwordValid) return;
+    if (!passwordsMatch || !passwordValid || !codeValid) return;
     setLoading(true);
     try {
-      await resetPassword(email, password);
+      if (embedded) {
+        await changePassword(currentPassword, password);
+      } else {
+        await resetPassword(email, code, password);
+      }
       toast.success("Senha alterada com sucesso.");
       navigate(embedded ? "/settings" : "/login");
     } catch (error) {
@@ -85,20 +95,64 @@ export function ResetPassword({ embedded = false }: { embedded?: boolean }) {
 
   const content = (
     <>
+      {!embedded ? (
+        <p className="mb-5 text-sm text-[color:var(--muted)]">
+          Informe o codigo de 6 digitos recebido por e-mail para definir sua nova senha.
+        </p>
+      ) : null}
       <form className="space-y-5" onSubmit={submit}>
-        <label className="block">
-          <span className="mono-label text-[color:var(--muted)]">Email</span>
-          <div className="mt-2 flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
-            <Mail size={18} className="text-[color:var(--muted)]" />
-            <input
-              className="w-full bg-transparent outline-none"
-              required
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-        </label>
+        {!embedded ? (
+          <>
+            <label className="block">
+              <span className="mono-label text-[color:var(--muted)]">Email</span>
+              <div className="mt-2 flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
+                <Mail size={18} className="text-[color:var(--muted)]" />
+                <input
+                  className="w-full bg-transparent outline-none"
+                  readOnly={Boolean(searchParams.get("email"))}
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mono-label text-[color:var(--muted)]">Codigo de verificacao</span>
+              <div className="mt-2 flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
+                <ShieldCheck size={18} className="text-[color:var(--muted)]" />
+                <input
+                  className="w-full bg-transparent font-mono tracking-[0.35em] outline-none"
+                  inputMode="numeric"
+                  maxLength={6}
+                  minLength={6}
+                  pattern="\d{6}"
+                  placeholder="000000"
+                  required
+                  type="text"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+              </div>
+            </label>
+          </>
+        ) : (
+          <label className="block">
+            <span className="mono-label text-[color:var(--muted)]">Senha atual</span>
+            <div className="mt-2 flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
+              <Lock size={18} className="text-[color:var(--muted)]" />
+              <input
+                className="w-full bg-transparent outline-none"
+                minLength={6}
+                required
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </div>
+          </label>
+        )}
 
         <label className="block">
           <span className="mono-label text-[color:var(--muted)]">Nova senha</span>
@@ -140,10 +194,15 @@ export function ResetPassword({ embedded = false }: { embedded?: boolean }) {
             As senhas precisam ser iguais.
           </p>
         ) : null}
+        {!embedded && !codeValid && code ? (
+          <p className="rounded-2xl border border-ember-500/30 bg-ember-500/10 p-3 text-sm text-ember-600 dark:text-ember-400">
+            O codigo deve ter 6 digitos.
+          </p>
+        ) : null}
 
         <Button
           className="w-full py-3 text-base"
-          disabled={loading || !password || !passwordValid || !passwordsMatch}
+          disabled={loading || !password || !passwordValid || !passwordsMatch || !codeValid}
           type="submit"
         >
           {loading ? "Salvando..." : "Salvar nova senha"}
@@ -165,7 +224,7 @@ export function ResetPassword({ embedded = false }: { embedded?: boolean }) {
   }
 
   return (
-    <AuthShell eyebrow="Nova senha" title="Defina uma nova senha">
+    <AuthShell eyebrow="Nova senha" title="Confirme o codigo e defina sua senha">
       {content}
     </AuthShell>
   );
@@ -209,9 +268,9 @@ function AuthFooter() {
       </Link>
       <Link
         className="font-semibold text-[color:var(--primary)] dark:text-[color:var(--accent)]"
-        to="/register"
+        to="/forgot-password"
       >
-        Criar conta
+        Reenviar codigo
       </Link>
     </div>
   );

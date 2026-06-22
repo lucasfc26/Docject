@@ -47,6 +47,21 @@ export class ResetPasswordDto {
   email!: string;
 
   @IsString()
+  @Matches(/^\d{6}$/, { message: "Informe o codigo de 6 digitos enviado por e-mail." })
+  code!: string;
+
+  @IsString()
+  @MinLength(6)
+  @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
+  password!: string;
+}
+
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(6)
+  currentPassword!: string;
+
+  @IsString()
   @MinLength(6)
   @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password!: string;

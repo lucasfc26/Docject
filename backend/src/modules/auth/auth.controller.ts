@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Post, Req } from "@nestjs/common";
+import { Body, Controller, Get, Post, Req, UnauthorizedException } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthenticatedRequest } from "../../common/current-user";
 import { Public } from "../../common/public.decorator";
-import { ForgotPasswordDto, LoginDto, LogoutDto, RefreshTokenDto, RegisterDto, ResetPasswordDto } from "./dto/auth.dto";
+import { ForgotPasswordDto, LoginDto, LogoutDto, RefreshTokenDto, RegisterDto, ResetPasswordDto, ChangePasswordDto } from "./dto/auth.dto";
 import { AuthService } from "./auth.service";
 
 @ApiTags("auth")
@@ -42,7 +42,14 @@ export class AuthController {
   @Public()
   @Post("reset-password")
   resetPassword(@Body() body: ResetPasswordDto) {
-    return this.auth.resetPassword(body.email, body.password);
+    return this.auth.resetPassword(body.email, body.code, body.password);
+  }
+
+  @Post("change-password")
+  changePassword(@Req() request: AuthenticatedRequest, @Body() body: ChangePasswordDto) {
+    const userId = request.user?.sub;
+    if (!userId) throw new UnauthorizedException();
+    return this.auth.changePassword(userId, body.currentPassword, body.password);
   }
 
   @Get("me")

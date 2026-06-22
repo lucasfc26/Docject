@@ -101,14 +101,29 @@ export async function requestPasswordReset(email: string) {
     body: JSON.stringify({ email: normalizeEmail(email) }),
   });
   await assertOk(response, "Nao foi possivel iniciar a recuperacao de acesso");
-  return response.json() as Promise<{ ok: boolean; email: string; mode?: string }>;
+  return response.json() as Promise<{ ok: boolean; message: string }>;
 }
 
-export async function resetPassword(email: string, password: string) {
+export async function resetPassword(email: string, code: string, password: string) {
   const response = await fetch(`${API_URL}/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: normalizeEmail(email), password }),
+    body: JSON.stringify({ email: normalizeEmail(email), code, password }),
+  });
+  await assertOk(response, "Nao foi possivel alterar a senha");
+  return response.json() as Promise<{ ok: boolean }>;
+}
+
+export async function changePassword(currentPassword: string, password: string) {
+  assertConsent();
+  await ensureToken();
+  const response = await fetch(`${API_URL}/auth/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}),
+    },
+    body: JSON.stringify({ currentPassword, password }),
   });
   await assertOk(response, "Nao foi possivel alterar a senha");
   return response.json() as Promise<{ ok: boolean }>;

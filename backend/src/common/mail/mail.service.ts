@@ -63,6 +63,35 @@ export class MailService {
     });
   }
 
+  async sendPasswordResetCode(input: {
+    to: string;
+    name: string;
+    code: string;
+    resetUrl: string;
+  }) {
+    const appName = process.env.APP_NAME ?? "Docject";
+    const text = [
+      `Ola, ${input.name}.`,
+      "",
+      `Recebemos uma solicitacao para redefinir sua senha no ${appName}.`,
+      "",
+      `Codigo de verificacao: ${input.code}`,
+      "",
+      "Acesse o link abaixo, informe o codigo e defina uma nova senha:",
+      input.resetUrl,
+      "",
+      "O codigo expira em 1 hora e pode ser usado apenas uma vez.",
+      "Se voce nao solicitou esta alteracao, ignore este e-mail.",
+    ].join("\n");
+
+    return this.sendMail({
+      to: input.to,
+      subject: `${appName} — codigo para redefinir senha`,
+      text,
+      html: text.replace(/\n/g, "<br>"),
+    });
+  }
+
   async sendContractSigningRequest(input: {
     to: string;
     name: string;
