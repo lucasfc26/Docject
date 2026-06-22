@@ -38,11 +38,16 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 docker compose -f docker-compose.prod.yml --env-file .env.prod restart
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
-# Caso atualize o DB Isso não limpa dados do banco. O db push só sincroniza o schema, adicionando as colunas novas.
+# Caso atualize o DB (contratos, assinaturas, busca, etc.)
 
-No VPS, rode:
+No VPS, rode nesta ordem:
 
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+# Se o banco ainda tiver colunas antigas (contractingPartyId, etc.), preserve participantes:
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
+  psql -U projectfy -d projectfy < backend/prisma/scripts/migrate-legacy-contract-participants.sql
+
 docker compose -f docker-compose.prod.yml --env-file .env.prod exec backend npx prisma db push
 docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend frontend
 
