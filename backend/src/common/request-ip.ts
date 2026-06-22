@@ -34,15 +34,16 @@ export function requestIp(request: Pick<Request, "headers" | "ip" | "socket">) {
     const chain = forwarded.split(",").map((ip) => ip.trim()).filter(Boolean);
     const publicIp = pickPublicIp(chain);
     if (publicIp) return publicIp;
+    const first = chain[0];
+    if (first && !isPrivateIp(first)) return first;
   }
 
-  if (realIp) return realIp;
   if (request.ip && !isPrivateIp(request.ip)) return request.ip;
 
   const remote = request.socket?.remoteAddress?.replace(/^::ffff:/, "");
   if (remote && !isPrivateIp(remote)) return remote;
 
-  return request.ip ?? remote ?? forwarded?.split(",")[0]?.trim();
+  return forwarded?.split(",")[0]?.trim() ?? (realIp && !isPrivateIp(realIp) ? realIp : undefined) ?? request.ip ?? remote;
 }
 
 export function requestUserAgent(request: Pick<Request, "headers">) {
