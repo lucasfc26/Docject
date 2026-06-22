@@ -14,6 +14,7 @@ import {
   Filter,
   Focus,
   GripVertical,
+  KeyRound,
   MoreHorizontal,
   Paperclip,
   Plus,
@@ -33,6 +34,7 @@ import {
   apiGet,
   apiPatch,
   apiPost,
+  apiResetUserPassword,
   apiUploadContractPdf,
   buildContractSignPayload,
   contractParticipantLabel,
@@ -3477,6 +3479,11 @@ export function SettingsPage() {
     meta: { successMessage: "Dados do usuario salvos." },
   });
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: (userId: string) => apiResetUserPassword(userId),
+    meta: { successMessage: "Nova senha enviada por e-mail." },
+  });
+
   useEffect(() => {
     if (settings)
       setSettingsForm({
@@ -3623,7 +3630,7 @@ export function SettingsPage() {
       {canManageUsers ? (
         <CrudPage<ApiUser>
           title="Equipe e clientes"
-          subtitle="Usuarios associados a este perfil. Funcionarios e clientes com acesso ao portal."
+          subtitle="Usuarios associados a este perfil. A senha e enviada automaticamente por e-mail ao criar ou resetar."
           queryKey="users"
           endpoint="/users"
           filterFn={(row) => row.id !== currentUser?.id}
@@ -3648,12 +3655,6 @@ export function SettingsPage() {
             { name: "email", label: "Email", required: true },
             { name: "cpf", label: "CPF" },
             {
-              name: "password",
-              label: "Senha",
-              type: "password",
-              requiredOnCreate: true,
-            },
-            {
               name: "role",
               label: "Papel",
               type: "select",
@@ -3669,15 +3670,32 @@ export function SettingsPage() {
               })),
             },
           ]}
-          normalize={(values, editing) => ({
+          normalize={(values) => ({
             name: values.name,
             email: normalizeEmail(values.email),
             cpf: values.cpf || undefined,
             role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
             clientId:
               values.role === "CLIENT" ? values.clientId || undefined : null,
-            ...(editing || !values.password ? {} : { password: values.password }),
           })}
+          rowActions={(row) => (
+            <Button
+              variant="secondary"
+              disabled={resetPasswordMutation.isPending}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Enviar uma nova senha aleatoria para ${row.email}?`,
+                  )
+                ) {
+                  resetPasswordMutation.mutate(row.id);
+                }
+              }}
+            >
+              <KeyRound size={16} />
+              Resetar senha
+            </Button>
+          )}
         />
       ) : null}
 
@@ -3783,6 +3801,7 @@ function CrudPage<T extends { id: string }>({
   normalize,
   afterCreate,
   filterFn,
+  rowActions,
 }: {
   title: string;
   subtitle: string;
@@ -3796,6 +3815,7 @@ function CrudPage<T extends { id: string }>({
   ) => Record<string, unknown>;
   afterCreate?: (created: T) => Promise<unknown>;
   filterFn?: (row: T) => boolean;
+  rowActions?: (row: T) => React.ReactNode;
 }) {
   const queryClient = useQueryClient();
   const {
@@ -3954,7 +3974,8 @@ function CrudPage<T extends { id: string }>({
                   );
                 })}
                 <td className="px-6 py-4">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
+                    {rowActions ? rowActions(row) : null}
                     <Button variant="secondary" onClick={() => startEdit(row)}>
                       <Edit3 size={16} />
                       Editar

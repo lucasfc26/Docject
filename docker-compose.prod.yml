@@ -37,6 +37,14 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       PORT: "3000"
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-https://dj.maselcorp.com.br}
+      APP_NAME: ${APP_NAME:-Docject}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - projectfy_uploads:/app/uploads
     depends_on:

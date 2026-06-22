@@ -157,6 +157,10 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export async function apiResetUserPassword(userId: string) {
+  return apiPost<{ ok: boolean; email: string }>(`/users/${userId}/reset-password`, {});
+}
+
 export async function apiUploadContractPdf(file: File): Promise<ApiFileUpload> {
   assertConsent();
   await ensureToken();

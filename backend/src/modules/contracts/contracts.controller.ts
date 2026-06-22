@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { Public } from "../../common/public.decorator";
 import { AuthenticatedRequest, contractScope } from "../../common/current-user";
 import { requestIp, requestUserAgent } from "../../common/request-ip";
+import { MailService } from "../../common/mail/mail.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ContractPdfService } from "./contract-pdf.service";
 import {
@@ -51,7 +52,8 @@ const contractInclude = {
 export class ContractsController {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly pdf: ContractPdfService
+    private readonly pdf: ContractPdfService,
+    private readonly mail: MailService,
   ) {}
 
   @Get()
@@ -222,6 +224,23 @@ export class ContractsController {
       },
       include: contractInclude,
     });
+
+    const contractingParty = updated.participants.find((participant) => participant.role === "CONTRACTING_PARTY");
+    const contractingPartyName = contractingParty?.user?.name ?? "contratante";
+    await Promise.all(
+      updated.participants.map(async (participant) => {
+        const email = participant.user?.email;
+        const name = participant.user?.name;
+        if (!email || !name) return;
+        await this.mail.sendContractSigningRequest({
+          to: email,
+          name,
+          contractTitle: updated.title,
+          contractingPartyName,
+        });
+      }),
+    );
+
     return updated;
   }
 

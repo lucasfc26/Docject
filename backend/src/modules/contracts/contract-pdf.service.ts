@@ -133,13 +133,17 @@ function addSignatureLogPages(
   let page = pdf.addPage();
   let cursor = page.getHeight() - 56;
   const margin = 44;
+  const contentWidth = page.getWidth() - margin * 2;
+
   const line = (text: string, size = 10, activeFont = font) => {
-    if (cursor < 64) {
-      page = pdf.addPage();
-      cursor = page.getHeight() - 56;
+    for (const wrapped of wrapText(text, activeFont, size, contentWidth)) {
+      if (cursor < 64) {
+        page = pdf.addPage();
+        cursor = page.getHeight() - 56;
+      }
+      page.drawText(wrapped, { x: margin, y: cursor, size, font: activeFont, color: rgb(0.1, 0.12, 0.16) });
+      cursor -= size + 8;
     }
-    page.drawText(text.slice(0, 115), { x: margin, y: cursor, size, font: activeFont, color: rgb(0.1, 0.12, 0.16) });
-    cursor -= size + 8;
   };
 
   line(`${data.title}`, 14, bold);
@@ -168,8 +172,10 @@ function addSignatureLogPages(
   line("Detalhes tecnicos das assinaturas", 13, bold);
   for (const log of data.signatureLogs) {
     line(`${log.role} | ${log.signerName} | ${formatUtcDate(log.signedAt)}`, 10, bold);
-    line(`Email: ${log.signerEmail ?? "-"} | CPF: ${log.signerCpf ?? "-"} | IP: ${log.ipAddress ?? "-"}`);
-    line(`User-Agent: ${truncate(log.userAgent, 90) ?? "-"}`);
+    line(`Email: ${log.signerEmail ?? "-"}`);
+    line(`CPF: ${log.signerCpf ?? "-"}`);
+    line(`IP: ${log.ipAddress ?? "-"}`);
+    if (log.userAgent) line(`User-Agent: ${log.userAgent}`);
     line(`Token SHA-256: ${log.tokenHash ?? "-"}`);
     line(`Hash documento no momento da assinatura: ${log.documentHash ?? "-"}`);
     if (log.latitude != null && log.longitude != null) {
@@ -229,7 +235,42 @@ function formatUtcDate(value: Date) {
   return `${value.toISOString().replace("T", " ").slice(0, 19)} UTC`;
 }
 
-function truncate(value?: string | null, max = 115) {
-  if (!value) return undefined;
-  return value.length > max ? `${value.slice(0, max - 3)}...` : value;
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return [""];
+
+  const words = normalized.split(" ");
+  const lines: string[] = [];
+  let current = "";
+
+  const pushLongToken = (token: string) => {
+    let chunk = "";
+    for (const char of token) {
+      const next = `${chunk}${char}`;
+      if (font.widthOfTextAtSize(next, size) <= maxWidth) {
+        chunk = next;
+        continue;
+      }
+      if (chunk) lines.push(chunk);
+      chunk = char;
+    }
+    current = chunk;
+  };
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (font.widthOfTextAtSize(word, size) <= maxWidth) {
+      current = word;
+    } else {
+      pushLongToken(word);
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines;
 }

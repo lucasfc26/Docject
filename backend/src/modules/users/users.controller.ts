@@ -12,6 +12,8 @@ import {
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthenticatedRequest } from "../../common/current-user";
+import { MailService } from "../../common/mail/mail.service";
+import { generateRandomPassword } from "../../common/password.util";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
@@ -19,7 +21,10 @@ import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
 @ApiTags("users")
 @Controller("users")
 export class UsersController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   @Get()
   async findAll(@Req() request: AuthenticatedRequest) {
@@ -48,11 +53,12 @@ export class UsersController {
     this.assertCanCreateRole(request.user?.role, requestedRole);
     const email = normalizeEmail(body.email);
     await this.assertEmailAvailable(email);
-    const passwordHash = await bcrypt.hash(body.password, 10);
+    const plainPassword = generateRandomPassword();
+    const passwordHash = await bcrypt.hash(plainPassword, 10);
     const adminId = request.user
       ? await this.resolveResponsibleAdminId(request.user.sub)
       : undefined;
-    return this.prisma.user.create({
+    const user = await this.prisma.user.create({
       data: {
         email,
         name: body.name,
@@ -66,13 +72,18 @@ export class UsersController {
       },
       select: userSelect,
     });
+
+    await this.mail.sendAccountPassword({
+      to: user.email,
+      name: user.name,
+      password: plainPassword,
+    });
+
+    return user;
   }
 
   @Patch(":id")
   async update(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: UpdateUserDto) {
-    const passwordHash = body.password
-      ? await bcrypt.hash(body.password, 10)
-      : undefined;
     const email = body.email ? normalizeEmail(body.email) : undefined;
     if (email) await this.assertEmailAvailable(email, id);
     const isSelf = request.user?.sub === id;
@@ -91,10 +102,42 @@ export class UsersController {
         address: body.address,
         role: role as never,
         clientId: role === "CLIENT" ? body.clientId : role ? null : undefined,
-        passwordHash,
       },
       select: userSelect,
     });
+  }
+
+  @Post(":id/reset-password")
+  async resetPassword(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    if (request.user?.role !== "ADMIN" && request.user?.role !== "MANAGER") {
+      throw new BadRequestException("Sem permissao para redefinir senha.");
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, adminId: true },
+    });
+    if (!user) throw new BadRequestException("Usuario nao encontrado.");
+
+    const adminId = await this.resolveResponsibleAdminId(request.user!.sub);
+    if (user.id !== adminId && user.adminId !== adminId) {
+      throw new BadRequestException("Sem permissao para redefinir senha deste usuario.");
+    }
+
+    const plainPassword = generateRandomPassword();
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash: await bcrypt.hash(plainPassword, 10) },
+    });
+
+    await this.mail.sendAccountPassword({
+      to: user.email,
+      name: user.name,
+      password: plainPassword,
+      reset: true,
+    });
+
+    return { ok: true, email: user.email };
   }
 
   @Delete(":id")

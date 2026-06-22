@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
+import { MailModule } from "./common/mail/mail.module";
 import { JwtAuthGuard } from "./common/jwt-auth.guard";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ActivityModule } from "./modules/activity/activity.module";
@@ -25,6 +26,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    MailModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET ?? "local-dev-secret",
