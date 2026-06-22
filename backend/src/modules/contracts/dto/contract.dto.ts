@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Min } from "class-validator";
+import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from "class-validator";
 
 export class CreateContractDto {
   @IsString()
@@ -10,28 +10,11 @@ export class CreateContractDto {
   value?: number;
 
   @IsOptional()
-  @IsIn(["DRAFT", "SENT", "SIGNED", "CANCELLED"])
-  status?: string;
-
-  @IsOptional()
   @IsString()
   clientId?: string;
 
-  @IsOptional()
   @IsString()
-  contractingPartyId?: string;
-
-  @IsOptional()
-  @IsString()
-  contractorId?: string;
-
-  @IsOptional()
-  @IsString()
-  witnessOneId?: string;
-
-  @IsOptional()
-  @IsString()
-  witnessTwoId?: string;
+  contractingPartyId!: string;
 }
 
 export class UpdateContractDto {
@@ -45,28 +28,21 @@ export class UpdateContractDto {
   value?: number;
 
   @IsOptional()
-  @IsIn(["DRAFT", "SENT", "SIGNED", "CANCELLED"])
-  status?: string;
-
-  @IsOptional()
   @IsString()
   clientId?: string | null;
+}
 
-  @IsOptional()
+export class AddContractParticipantDto {
+  @ValidateIf((body) => !body.email)
   @IsString()
-  contractingPartyId?: string | null;
+  userId?: string;
 
-  @IsOptional()
+  @ValidateIf((body) => !body.userId)
   @IsString()
-  contractorId?: string | null;
+  email?: string;
 
-  @IsOptional()
-  @IsString()
-  witnessOneId?: string | null;
-
-  @IsOptional()
-  @IsString()
-  witnessTwoId?: string | null;
+  @IsIn(["CONTRACTOR", "WITNESS"])
+  role!: "CONTRACTOR" | "WITNESS";
 }
 
 export class CreateContractVersionDto {
@@ -82,6 +58,23 @@ export class CreateContractVersionDto {
 export class SignContractDto {
   @IsString()
   password!: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  geoAccuracy?: number;
 }
 
 export class ValidateContractDto {

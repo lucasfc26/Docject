@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import * as bcrypt from "bcrypt";
+import { ContractParticipantRole, Prisma } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { unlink } from "node:fs/promises";
 import { readFile } from "node:fs/promises";
@@ -8,19 +9,42 @@ import { basename } from "node:path";
 import { join } from "node:path";
 import { Public } from "../../common/public.decorator";
 import { AuthenticatedRequest, contractScope } from "../../common/current-user";
+import { requestIp, requestUserAgent } from "../../common/request-ip";
 import { PrismaService } from "../../prisma/prisma.service";
 import { ContractPdfService } from "./contract-pdf.service";
-import { CreateContractDto, CreateContractVersionDto, SignContractDto, UpdateContractDto, ValidateContractDto } from "./dto/contract.dto";
+import {
+  allParticipantsSigned,
+  canManageContractParticipants,
+  nextWitnessIndex,
+  participantLabel,
+  participantSignLabel,
+} from "./contracts.helpers";
+import {
+  AddContractParticipantDto,
+  CreateContractDto,
+  CreateContractVersionDto,
+  SignContractDto,
+  UpdateContractDto,
+  ValidateContractDto,
+} from "./dto/contract.dto";
+
+const userSelect = { id: true, name: true, email: true, role: true, cpf: true } as const;
+const actorSelect = { id: true, name: true, email: true } as const;
 
 const contractInclude = {
   versions: true,
   client: true,
+  createdBy: { select: actorSelect },
+  participants: {
+    orderBy: [{ role: "asc" }, { witnessIndex: "asc" }, { addedAt: "asc" }] as Prisma.ContractParticipantOrderByWithRelationInput[],
+    include: {
+      user: { select: userSelect },
+      addedBy: { select: actorSelect },
+    },
+  },
+  eventLogs: { orderBy: { createdAt: "asc" } },
   signatureLogs: { orderBy: { signedAt: "asc" } },
-  contractingParty: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-  contractor: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-  witnessOne: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-  witnessTwo: { select: { id: true, name: true, email: true, role: true, cpf: true } }
-} as const;
+} satisfies Prisma.ContractInclude;
 
 @ApiTags("contracts")
 @Controller("contracts")
@@ -36,8 +60,45 @@ export class ContractsController {
   }
 
   @Post()
-  create(@Body() body: CreateContractDto) {
-    return this.prisma.contract.create({ data: { ...body, status: "DRAFT" } as never, include: contractInclude });
+  async create(@Req() request: AuthenticatedRequest, @Body() body: CreateContractDto) {
+    const actorId = request.user?.sub;
+    const actor = actorId ? await this.prisma.user.findUnique({ where: { id: actorId }, select: actorSelect }) : null;
+    const contractingParty = await this.prisma.user.findUnique({ where: { id: body.contractingPartyId }, select: userSelect });
+    if (!contractingParty) throw new BadRequestException("Contratante invalido.");
+
+    const contract = await this.prisma.contract.create({
+      data: {
+        title: body.title,
+        value: body.value ?? 0,
+        status: "DRAFT",
+        clientId: body.clientId,
+        createdById: actorId,
+        participants: {
+          create: {
+            userId: body.contractingPartyId,
+            role: "CONTRACTING_PARTY",
+            addedById: actorId,
+          },
+        },
+        eventLogs: {
+          create: {
+            eventType: "CREATED",
+            actorUserId: actorId,
+            actorName: actor?.name,
+            actorEmail: actor?.email,
+            description: buildCreatedDescription(actor, contractTitle(body.title)),
+            metadata: {
+              contractingPartyId: body.contractingPartyId,
+              contractingPartyName: contractingParty.name,
+              contractingPartyEmail: contractingParty.email,
+            },
+          },
+        },
+      },
+      include: contractInclude,
+    });
+
+    return contract;
   }
 
   @Patch(":id")
@@ -48,14 +109,76 @@ export class ContractsController {
     }
     return this.prisma.contract.update({
       where: { id },
-      data: { ...body, status: undefined } as never,
-      include: contractInclude
+      data: body as never,
+      include: contractInclude,
     });
   }
 
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.prisma.contract.delete({ where: { id } });
+  }
+
+  @Post(":id/participants")
+  async addParticipant(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: AddContractParticipantDto) {
+    const actorId = request.user?.sub;
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { participants: true },
+    });
+    if (!contract) throw new BadRequestException("Contrato nao encontrado.");
+    if (contract.status !== "DRAFT" && contract.status !== "SENT") {
+      throw new BadRequestException("Participantes so podem ser adicionados em rascunhos ou contratos enviados.");
+    }
+    if (!canManageContractParticipants(request.user, contract)) {
+      throw new BadRequestException("Sem permissao para adicionar participantes.");
+    }
+
+    const participantUserId = await resolveParticipantUserId(this.prisma, body);
+    const user = await this.prisma.user.findUnique({ where: { id: participantUserId }, select: userSelect });
+    if (!user) throw new BadRequestException("Usuario invalido.");
+    if (contract.participants.some((participant) => participant.userId === participantUserId)) {
+      throw new BadRequestException("Este usuario ja participa do contrato.");
+    }
+    if (body.role === "CONTRACTOR" && contract.participants.some((participant) => participant.role === "CONTRACTOR")) {
+      throw new BadRequestException("O contrato ja possui um contratado.");
+    }
+
+    const actor = actorId ? await this.prisma.user.findUnique({ where: { id: actorId }, select: actorSelect }) : null;
+    const witnessIndex = body.role === "WITNESS" ? nextWitnessIndex(contract.participants) : null;
+    const roleLabel = participantLabel(body.role, witnessIndex);
+
+    await this.prisma.contractParticipant.create({
+      data: {
+        contractId: id,
+        userId: participantUserId,
+        role: body.role,
+        witnessIndex,
+        addedById: actorId,
+      },
+    });
+
+    await this.prisma.contractEventLog.create({
+      data: {
+        contractId: id,
+        eventType: "PARTICIPANT_ADDED",
+        actorUserId: actorId,
+        actorName: actor?.name,
+        actorEmail: actor?.email,
+        description: buildParticipantAddedDescription(actor, user, roleLabel),
+        metadata: {
+          participantUserId: user.id,
+          participantName: user.name,
+          participantEmail: user.email,
+          participantCpf: user.cpf,
+          role: body.role,
+          witnessIndex,
+        },
+        ipAddress: requestIp(request),
+      },
+    });
+
+    return this.prisma.contract.findUnique({ where: { id }, include: contractInclude });
   }
 
   @Post(":id/versions")
@@ -68,28 +191,46 @@ export class ContractsController {
   }
 
   @Post(":id/send")
-  async send(@Param("id") id: string) {
+  async send(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    const actorId = request.user?.sub;
     const contract = await this.prisma.contract.findUnique({
       where: { id },
-      include: { versions: true }
+      include: { versions: true, participants: true },
     });
     if (!contract) throw new BadRequestException("Contrato nao encontrado.");
     if (contract.status !== "DRAFT") throw new BadRequestException("Apenas rascunhos podem ser enviados.");
     if (!isContractReady(contract)) {
-      throw new BadRequestException("Informe titulo, valor, PDF, contratante, contratado e duas testemunhas antes de enviar.");
+      throw new BadRequestException("Informe titulo, valor, PDF e contratante antes de enviar.");
     }
-    return this.prisma.contract.update({
+
+    const actor = actorId ? await this.prisma.user.findUnique({ where: { id: actorId }, select: actorSelect }) : null;
+    const updated = await this.prisma.contract.update({
       where: { id },
-      data: { status: "SENT", sentAt: new Date() },
-      include: contractInclude
+      data: {
+        status: "SENT",
+        sentAt: new Date(),
+        eventLogs: {
+          create: {
+            eventType: "SENT",
+            actorUserId: actorId,
+            actorName: actor?.name,
+            actorEmail: actor?.email,
+            description: buildSentDescription(actor, contract.title),
+            ipAddress: requestIp(request),
+          },
+        },
+      },
+      include: contractInclude,
     });
+    return updated;
   }
 
   @Post(":id/cancel")
-  async cancel(@Param("id") id: string) {
+  async cancel(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    const actorId = request.user?.sub;
     const contract = await this.prisma.contract.findUnique({
       where: { id },
-      include: { versions: true }
+      include: { versions: true },
     });
     if (!contract) throw new BadRequestException("Contrato nao encontrado.");
     if (contract.status === "SIGNED") throw new BadRequestException("Contratos assinados nao podem ser cancelados.");
@@ -98,23 +239,41 @@ export class ContractsController {
       await deleteUploadedContractFile(version.fileUrl);
     }
 
+    const actor = actorId ? await this.prisma.user.findUnique({ where: { id: actorId }, select: actorSelect }) : null;
     return this.prisma.contract.update({
       where: { id },
-      data: { status: "CANCELLED", cancelledAt: new Date(), versions: { deleteMany: {} } },
-      include: contractInclude
+      data: {
+        status: "CANCELLED",
+        cancelledAt: new Date(),
+        versions: { deleteMany: {} },
+        eventLogs: {
+          create: {
+            eventType: "CANCELLED",
+            actorUserId: actorId,
+            actorName: actor?.name,
+            actorEmail: actor?.email,
+            description: buildCancelledDescription(actor, contract.title),
+            ipAddress: requestIp(request),
+          },
+        },
+      },
+      include: contractInclude,
     });
   }
 
   @Post(":id/sign")
   async sign(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: SignContractDto) {
     const userId = request.user?.sub;
-    const contract = await this.prisma.contract.findUnique({ where: { id }, include: { versions: true } });
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { versions: true, participants: true },
+    });
     if (!userId || !contract) throw new BadRequestException("Contrato nao encontrado.");
     if (contract.status !== "SENT") throw new BadRequestException("Contrato indisponivel para assinatura.");
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, email: true, cpf: true, passwordHash: true }
+      select: { id: true, name: true, email: true, cpf: true, passwordHash: true },
     });
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       throw new BadRequestException("Senha invalida para assinatura.");
@@ -123,35 +282,75 @@ export class ContractsController {
       throw new BadRequestException("Cadastre o CPF da conta antes de assinar.");
     }
 
-    const data: Record<string, Date> = {};
-    const role = signatureRole(contract, userId);
-    if (!role) throw new BadRequestException("Sua conta nao esta vinculada a este contrato.");
-    if (role.field === "contractingPartySignedAt" && contract.contractingPartySignedAt) throw new BadRequestException("Assinatura ja registrada.");
-    if (role.field === "contractorSignedAt" && contract.contractorSignedAt) throw new BadRequestException("Assinatura ja registrada.");
-    if (role.field === "witnessOneSignedAt" && contract.witnessOneSignedAt) throw new BadRequestException("Assinatura ja registrada.");
-    if (role.field === "witnessTwoSignedAt" && contract.witnessTwoSignedAt) throw new BadRequestException("Assinatura ja registrada.");
-    data[role.field] = new Date();
+    const participant = contract.participants.find((entry) => entry.userId === userId);
+    if (!participant) throw new BadRequestException("Sua conta nao esta vinculada a este contrato.");
+    if (participant.signedAt) throw new BadRequestException("Assinatura ja registrada.");
 
+    const roleLabel = participantLabel(participant.role, participant.witnessIndex);
     const documentHash = await uploadedContractHash(contract.versions);
     const token = bearerToken(request);
-    const signed = await this.prisma.contract.update({ where: { id }, data });
+    const signedAt = new Date();
+
+    await this.prisma.contractParticipant.update({
+      where: { id: participant.id },
+      data: { signedAt },
+    });
+
     await this.prisma.contractSignatureLog.create({
       data: {
         contractId: id,
         userId,
-        role: role.label,
+        role: roleLabel,
         signerName: user.name,
         signerEmail: user.email,
         signerCpf: user.cpf,
         ipAddress: requestIp(request),
+        userAgent: requestUserAgent(request),
+        latitude: body.latitude,
+        longitude: body.longitude,
+        geoAccuracy: body.geoAccuracy,
         tokenHash: token ? sha256(token) : undefined,
         documentHash,
       },
     });
-    const allSigned = Boolean(signed.contractingPartySignedAt && signed.contractorSignedAt && signed.witnessOneSignedAt && signed.witnessTwoSignedAt);
-    if (allSigned) {
+
+    await this.prisma.contractEventLog.create({
+      data: {
+        contractId: id,
+        eventType: "SIGNED",
+        actorUserId: userId,
+        actorName: user.name,
+        actorEmail: user.email,
+        description: buildSignedDescription(user, participant.role, participant.witnessIndex, requestIp(request), body),
+        metadata: {
+          role: participant.role,
+          witnessIndex: participant.witnessIndex,
+          tokenHash: token ? sha256(token) : undefined,
+          documentHash,
+          latitude: body.latitude,
+          longitude: body.longitude,
+        },
+        ipAddress: requestIp(request),
+      },
+    });
+
+    const refreshed = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { participants: true },
+    });
+    if (!refreshed) throw new BadRequestException("Contrato nao encontrado.");
+
+    if (allParticipantsSigned(refreshed.participants)) {
+      await this.prisma.contractEventLog.create({
+        data: {
+          contractId: id,
+          eventType: "FINALIZED",
+          description: `Processo de assinatura finalizado automaticamente para o documento ${id}.`,
+        },
+      });
       return this.pdf.generateSignedPdf(id);
     }
+
     return this.prisma.contract.findUnique({ where: { id }, include: contractInclude });
   }
 
@@ -161,7 +360,7 @@ export class ContractsController {
     const validationCodeHash = sha256(normalizeValidationCode(body.code));
     const contract = await this.prisma.contract.findFirst({
       where: { validationCodeHash, status: "SIGNED" },
-      include: contractInclude
+      include: contractInclude,
     });
     if (!contract) throw new BadRequestException("Senha de validacao invalida.");
     return contract;
@@ -171,18 +370,14 @@ export class ContractsController {
 function isContractReady(contract: {
   title: string;
   value: unknown;
-  contractorId?: string | null;
-  contractingPartyId?: string | null;
-  witnessOneId?: string | null;
-  witnessTwoId?: string | null;
+  participants: Array<{ role: ContractParticipantRole }>;
   versions: Array<{ fileUrl?: string | null }>;
 }) {
-  const participants = [contract.contractingPartyId, contract.contractorId, contract.witnessOneId, contract.witnessTwoId];
+  const hasContractingParty = contract.participants.some((participant) => participant.role === "CONTRACTING_PARTY");
   return Boolean(
     contract.title.trim() &&
       Number(contract.value) > 0 &&
-      participants.every(Boolean) &&
-      new Set(participants).size === 4 &&
+      hasContractingParty &&
       contract.versions.some((version) => version.fileUrl)
   );
 }
@@ -190,9 +385,7 @@ function isContractReady(contract: {
 async function deleteUploadedContractFile(fileUrl?: string | null) {
   if (!fileUrl) return;
   try {
-    const pathname = fileUrl.startsWith("http")
-      ? new URL(fileUrl).pathname
-      : fileUrl;
+    const pathname = fileUrl.startsWith("http") ? new URL(fileUrl).pathname : fileUrl;
     if (!pathname.startsWith("/uploads/contracts/")) return;
     const filename = pathname.split("/").pop();
     if (!filename) return;
@@ -200,19 +393,6 @@ async function deleteUploadedContractFile(fileUrl?: string | null) {
   } catch {
     return;
   }
-}
-
-function signatureRole(contract: {
-  contractingPartyId?: string | null;
-  contractorId?: string | null;
-  witnessOneId?: string | null;
-  witnessTwoId?: string | null;
-}, userId: string) {
-  if (contract.contractingPartyId === userId) return { label: "Contratante", field: "contractingPartySignedAt" };
-  if (contract.contractorId === userId) return { label: "Contratado", field: "contractorSignedAt" };
-  if (contract.witnessOneId === userId) return { label: "Testemunha 1", field: "witnessOneSignedAt" };
-  if (contract.witnessTwoId === userId) return { label: "Testemunha 2", field: "witnessTwoSignedAt" };
-  return undefined;
 }
 
 async function uploadedContractHash(versions: Array<{ version: number; fileUrl?: string | null }>) {
@@ -229,17 +409,73 @@ function bearerToken(request: AuthenticatedRequest) {
   return header?.startsWith("Bearer ") ? header.slice(7) : undefined;
 }
 
-function requestIp(request: AuthenticatedRequest) {
-  const forwarded = request.headers["x-forwarded-for"];
-  if (typeof forwarded === "string") return forwarded.split(",")[0]?.trim();
-  if (Array.isArray(forwarded)) return forwarded[0];
-  return request.ip;
-}
-
 function sha256(value: Buffer | Uint8Array | string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
 function normalizeValidationCode(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+async function resolveParticipantUserId(
+  prisma: PrismaService,
+  body: { userId?: string; email?: string }
+) {
+  if (body.userId) return body.userId;
+  const email = body.email?.trim().toLowerCase();
+  if (!email) throw new BadRequestException("Informe o usuario ou e-mail do participante.");
+  const user = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (!user) throw new BadRequestException("Nenhuma conta encontrada para este e-mail.");
+  return user.id;
+}
+
+function contractTitle(title: string) {
+  return title.trim() || "sem titulo";
+}
+
+function buildCreatedDescription(actor: { name: string; email: string } | null, title: string) {
+  const who = actor ? `Operador com email ${actor.email}` : "Sistema";
+  return `${who} criou este documento "${title}".`;
+}
+
+function buildParticipantAddedDescription(
+  actor: { name: string; email: string } | null,
+  participant: { name: string; email: string; cpf?: string | null },
+  roleLabel: string
+) {
+  const who = actor ? `Operador com email ${actor.email}` : "Sistema";
+  return `${who} adicionou a lista de assinatura: ${participant.email} para assinar como ${roleLabel.toLowerCase()}. Dados informados: nome ${participant.name} e CPF ${participant.cpf ?? "-"}.`;
+}
+
+function buildSentDescription(actor: { name: string; email: string } | null, title: string) {
+  const who = actor ? `Operador com email ${actor.email}` : "Sistema";
+  return `${who} enviou o documento "${title}" para assinatura.`;
+}
+
+function buildCancelledDescription(actor: { name: string; email: string } | null, title: string) {
+  const who = actor ? `Operador com email ${actor.email}` : "Sistema";
+  return `${who} cancelou o documento "${title}".`;
+}
+
+function buildSignedDescription(
+  user: { name: string; email: string; cpf?: string | null },
+  role: ContractParticipantRole,
+  witnessIndex: number | null | undefined,
+  ip?: string,
+  body?: SignContractDto
+) {
+  const action = participantSignLabel(role, witnessIndex);
+  const parts = [
+    `${user.name} ${action}.`,
+    `CPF informado: ${user.cpf ?? "-"}.`,
+    `E-mail: ${user.email}.`,
+    ip ? `IP: ${ip}.` : undefined,
+    body?.latitude != null && body?.longitude != null
+      ? `Localizacao compartilhada: latitude ${body.latitude} e longitude ${body.longitude}.`
+      : undefined,
+  ].filter(Boolean);
+  return parts.join(" ");
 }

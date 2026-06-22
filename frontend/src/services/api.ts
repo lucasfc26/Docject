@@ -334,6 +334,25 @@ export type ApiServiceHealthCheckResult = ApiServiceHealthCheck & {
   checkedAt: string;
 };
 
+export type ApiContractParticipant = {
+  id: string;
+  role: "CONTRACTING_PARTY" | "CONTRACTOR" | "WITNESS";
+  witnessIndex?: number;
+  signedAt?: string;
+  addedAt: string;
+  user: { id: string; name: string; email: string; role: string; cpf?: string };
+  addedBy?: { id: string; name: string; email: string };
+};
+
+export type ApiContractEventLog = {
+  id: string;
+  eventType: string;
+  actorName?: string;
+  actorEmail?: string;
+  description: string;
+  createdAt: string;
+};
+
 export type ApiContract = {
   id: string;
   title: string;
@@ -341,18 +360,9 @@ export type ApiContract = {
   status: string;
   clientId?: string;
   client?: { id?: string; name: string };
-  contractingPartyId?: string;
-  contractingParty?: { id: string; name: string; email: string; role: string; cpf?: string };
-  contractorId?: string;
-  contractor?: { id: string; name: string; email: string; role: string; cpf?: string };
-  witnessOneId?: string;
-  witnessOne?: { id: string; name: string; email: string; role: string; cpf?: string };
-  witnessTwoId?: string;
-  witnessTwo?: { id: string; name: string; email: string; role: string; cpf?: string };
-  contractingPartySignedAt?: string;
-  contractorSignedAt?: string;
-  witnessOneSignedAt?: string;
-  witnessTwoSignedAt?: string;
+  createdBy?: { id: string; name: string; email: string };
+  participants?: ApiContractParticipant[];
+  eventLogs?: ApiContractEventLog[];
   originalDocumentHash?: string;
   signedDocumentHash?: string;
   signedFileUrl?: string;
@@ -370,10 +380,65 @@ export type ApiContractSignatureLog = {
   signerEmail?: string;
   signerCpf?: string;
   ipAddress?: string;
+  userAgent?: string;
+  latitude?: number;
+  longitude?: number;
+  geoAccuracy?: number;
   tokenHash?: string;
   documentHash?: string;
   signedAt: string;
 };
+
+export type ContractSignPayload = {
+  password: string;
+  latitude?: number;
+  longitude?: number;
+  geoAccuracy?: number;
+};
+
+export async function buildContractSignPayload(
+  password: string,
+  shareLocation: boolean,
+): Promise<ContractSignPayload> {
+  const payload: ContractSignPayload = { password };
+  if (!shareLocation || !navigator.geolocation) return payload;
+
+  try {
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        maximumAge: 60_000,
+        timeout: 10_000,
+      });
+    });
+    payload.latitude = position.coords.latitude;
+    payload.longitude = position.coords.longitude;
+    payload.geoAccuracy = position.coords.accuracy;
+  } catch {
+    // Localizacao indisponivel — segue sem geo.
+  }
+
+  return payload;
+}
+
+export function contractParticipantLabel(
+  role: ApiContractParticipant["role"],
+  witnessIndex?: number,
+) {
+  if (role === "CONTRACTING_PARTY") return "Contratante";
+  if (role === "CONTRACTOR") return "Contratado";
+  if (role === "WITNESS") return witnessIndex ? `Testemunha ${witnessIndex}` : "Testemunha";
+  return role;
+}
+
+export function sortedContractParticipants(contract: ApiContract) {
+  const order = { CONTRACTING_PARTY: 0, CONTRACTOR: 1, WITNESS: 2 } as const;
+  return [...(contract.participants ?? [])].sort((left, right) => {
+    const roleDiff = order[left.role] - order[right.role];
+    if (roleDiff !== 0) return roleDiff;
+    return (left.witnessIndex ?? 0) - (right.witnessIndex ?? 0);
+  });
+}
 
 export type ApiFileUpload = {
   id: string;

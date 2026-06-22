@@ -22,9 +22,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Fragment, FormEvent, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
+import { scrollToFocusRow, useFocusFromUrl } from "../hooks/useFocusFromUrl";
 import {
   apiDelete,
   apiAssetUrl,
@@ -33,6 +34,9 @@ import {
   apiPatch,
   apiPost,
   apiUploadContractPdf,
+  buildContractSignPayload,
+  contractParticipantLabel,
+  sortedContractParticipants,
   type ApiAppointment,
   type ApiClient,
   type ApiContract,
@@ -215,8 +219,17 @@ export function ProjectsPage() {
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<ApiProject | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [focusedId, setFocusedId] = useState<string | null>(null);
   const [form, setForm] = useState<ProjectForm>(defaultProjectForm());
   const [modules, setModules] = useState<ProjectModuleForm[]>([]);
+
+  const handleFocus = useCallback((id: string) => {
+    setFocusedId(id);
+    setExpanded((current) => ({ ...current, [id]: true }));
+    scrollToFocusRow(id);
+  }, []);
+
+  useFocusFromUrl(handleFocus);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -440,7 +453,8 @@ export function ProjectsPage() {
               return (
                 <Fragment key={project.id}>
                   <tr
-                    className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
+                    className={`border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)] ${focusRowClass(project.id, focusedId)}`}
+                    id={`focus-row-${project.id}`}
                     key={project.id}
                   >
                     <td className="px-6 py-4">
@@ -957,17 +971,23 @@ export function ContractsPage() {
   const [editing, setEditing] = useState<ApiContract | null>(null);
   const [form, setForm] = useState(defaultContractForm());
   const [expandedContracts, setExpandedContracts] = useState<Record<string, boolean>>({});
+  const [focusedContractId, setFocusedContractId] = useState<string | null>(null);
   const currentUserId = useMemo(() => readStoredUserId(), []);
+
+  const handleContractFocus = useCallback((id: string) => {
+    setFocusedContractId(id);
+    setExpandedContracts((current) => ({ ...current, [id]: true }));
+    scrollToFocusRow(id);
+  }, []);
+
+  useFocusFromUrl(handleContractFocus);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
         title: form.title,
         value: Number(form.value || 0),
-        contractingPartyId: form.contractingPartyId || null,
-        contractorId: form.contractorId || null,
-        witnessOneId: form.witnessOneId || null,
-        witnessTwoId: form.witnessTwoId || null,
+        contractingPartyId: form.contractingPartyId,
       };
       const saved = editing
         ? await apiPatch<ApiContract>(`/contracts/${editing.id}`, payload)
@@ -1004,10 +1024,17 @@ export function ContractsPage() {
   });
 
   const signMutation = useMutation({
-    mutationFn: ({ id, password }: { id: string; password: string }) =>
-      apiPost<ApiContract>(`/contracts/${id}/sign`, { password }),
+    mutationFn: async ({ id, password, shareLocation }: { id: string; password: string; shareLocation: boolean }) =>
+      apiPost<ApiContract>(`/contracts/${id}/sign`, await buildContractSignPayload(password, shareLocation)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
     meta: { successMessage: "Contrato assinado com sucesso." },
+  });
+
+  const addParticipantMutation = useMutation({
+    mutationFn: ({ id, userId, role }: { id: string; userId: string; role: "CONTRACTOR" | "WITNESS" }) =>
+      apiPost<ApiContract>(`/contracts/${id}/participants`, { userId, role }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+    meta: { successMessage: "Participante adicionado ao contrato." },
   });
 
   const startEdit = (contract: ApiContract) => {
@@ -1015,10 +1042,8 @@ export function ContractsPage() {
     setForm({
       title: contract.title,
       value: String(contract.value ?? 0),
-      contractingPartyId: contract.contractingPartyId ?? "",
-      contractorId: contract.contractorId ?? "",
-      witnessOneId: contract.witnessOneId ?? "",
-      witnessTwoId: contract.witnessTwoId ?? "",
+      contractingPartyId:
+        contract.participants?.find((participant) => participant.role === "CONTRACTING_PARTY")?.user.id ?? "",
       file: null,
     });
     setOpen(true);
@@ -1085,7 +1110,8 @@ export function ContractsPage() {
               return (
                 <Fragment key={contract.id}>
                   <tr
-                    className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
+                    className={`border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)] ${focusRowClass(contract.id, focusedContractId)}`}
+                    id={`focus-row-${contract.id}`}
                   >
                     <td className="px-6 py-4">
                       <Button
@@ -1177,9 +1203,13 @@ export function ContractsPage() {
                           <Button
                             disabled={signMutation.isPending}
                             variant="secondary"
-                            onClick={() => {
+                            onClick={async () => {
                               const password = window.prompt("Digite sua senha para assinar este contrato:");
-                              if (password) signMutation.mutate({ id: contract.id, password });
+                              if (!password) return;
+                              const shareLocation = window.confirm(
+                                "Compartilhar localizacao aproximada no registro da assinatura?",
+                              );
+                              signMutation.mutate({ id: contract.id, password, shareLocation });
                             }}
                           >
                             <FileSignature size={16} />
@@ -1202,7 +1232,14 @@ export function ContractsPage() {
                     <tr className="border-b border-[color:var(--line)] bg-[color:var(--panel-strong)]/60">
                       <td />
                       <td className="px-6 py-5" colSpan={5}>
-                        <ContractSignaturesPanel contract={contract} />
+                        <ContractSignaturesPanel
+                          contract={contract}
+                          users={users}
+                          onAddParticipant={(userId, role) =>
+                            addParticipantMutation.mutate({ id: contract.id, userId, role })
+                          }
+                          addingParticipant={addParticipantMutation.isPending}
+                        />
                       </td>
                     </tr>
                   ) : null}
@@ -1273,33 +1310,9 @@ export function ContractsPage() {
                   setForm((current) => ({ ...current, contractingPartyId: value }))
                 }
               />
-              <ContractUserSelect
-                disabled={Boolean(editing && editing.status !== "DRAFT")}
-                label="Contratado"
-                users={users}
-                value={form.contractorId}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, contractorId: value }))
-                }
-              />
-              <ContractUserSelect
-                disabled={Boolean(editing && editing.status !== "DRAFT")}
-                label="Testemunha 1"
-                users={users}
-                value={form.witnessOneId}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, witnessOneId: value }))
-                }
-              />
-              <ContractUserSelect
-                disabled={Boolean(editing && editing.status !== "DRAFT")}
-                label="Testemunha 2"
-                users={users}
-                value={form.witnessTwoId}
-                onChange={(value) =>
-                  setForm((current) => ({ ...current, witnessTwoId: value }))
-                }
-              />
+              <p className="md:col-span-2 text-sm text-[color:var(--muted)]">
+                Contratado e testemunhas podem ser adicionados depois, no painel do contrato.
+              </p>
               <label className="block md:col-span-2">
                 <span className="mono-label text-[color:var(--muted)]">
                   Anexo PDF
@@ -1353,9 +1366,27 @@ export function ContractsPage() {
   );
 }
 
-function ContractSignaturesPanel({ contract }: { contract: ApiContract }) {
-  const participants = contractParticipants(contract);
+function ContractSignaturesPanel({
+  contract,
+  users,
+  onAddParticipant,
+  addingParticipant,
+}: {
+  contract: ApiContract;
+  users: ApiUser[];
+  onAddParticipant: (userId: string, role: "CONTRACTOR" | "WITNESS") => void;
+  addingParticipant: boolean;
+}) {
+  const participants = sortedContractParticipants(contract);
   const logs = contract.signatureLogs ?? [];
+  const events = contract.eventLogs ?? [];
+  const [newParticipantId, setNewParticipantId] = useState("");
+  const [newParticipantRole, setNewParticipantRole] = useState<"CONTRACTOR" | "WITNESS">("CONTRACTOR");
+  const canAddParticipants = contract.status === "DRAFT" || contract.status === "SENT";
+  const hasContractor = participants.some((participant) => participant.role === "CONTRACTOR");
+  const participantIds = new Set(participants.map((participant) => participant.user.id));
+  const availableUsers = users.filter((user) => !participantIds.has(user.id));
+
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
       <div className="grid gap-3">
@@ -1363,13 +1394,19 @@ function ContractSignaturesPanel({ contract }: { contract: ApiContract }) {
         {participants.map((participant) => (
           <div
             className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4"
-            key={participant.label}
+            key={participant.id}
           >
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-[color:var(--muted)]">{participant.label}</p>
-              <p className="truncate font-semibold">{participant.user?.name ?? "Conta nao vinculada"}</p>
+              <p className="text-xs font-semibold text-[color:var(--muted)]">
+                {contractParticipantLabel(participant.role, participant.witnessIndex)}
+              </p>
+              <p className="truncate font-semibold">{participant.user.name}</p>
               <p className="truncate text-xs text-[color:var(--muted)]">
-                {participant.user?.email ?? "-"} | CPF: {participant.user?.cpf ?? "-"}
+                {participant.user.email} | CPF: {participant.user.cpf ?? "-"}
+              </p>
+              <p className="truncate text-xs text-[color:var(--muted)]">
+                Adicionado em {formatUtcDateTime(participant.addedAt)}
+                {participant.addedBy ? ` por ${participant.addedBy.name}` : ""}
               </p>
             </div>
             <StatusBadge tone={participant.signedAt ? "success" : "warning"}>
@@ -1377,9 +1414,72 @@ function ContractSignaturesPanel({ contract }: { contract: ApiContract }) {
             </StatusBadge>
           </div>
         ))}
+        {canAddParticipants ? (
+          <div className="rounded-2xl border border-dashed border-[color:var(--line)] p-4">
+            <p className="mono-label text-[color:var(--muted)]">Adicionar participante</p>
+            <div className="mt-3 grid gap-3">
+              <select
+                className="w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm outline-none"
+                value={newParticipantRole}
+                onChange={(event) => setNewParticipantRole(event.target.value as "CONTRACTOR" | "WITNESS")}
+              >
+                <option disabled={hasContractor} value="CONTRACTOR">
+                  Contratado
+                </option>
+                <option value="WITNESS">Testemunha</option>
+              </select>
+              <select
+                className="w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm outline-none"
+                value={newParticipantId}
+                onChange={(event) => setNewParticipantId(event.target.value)}
+              >
+                <option value="">Selecione um usuario</option>
+                {availableUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
+              <Button
+                disabled={addingParticipant || !newParticipantId || (newParticipantRole === "CONTRACTOR" && hasContractor)}
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  if (!newParticipantId) return;
+                  onAddParticipant(newParticipantId, newParticipantRole);
+                  setNewParticipantId("");
+                }}
+              >
+                <Plus size={16} />
+                Adicionar
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="grid gap-3">
-        <p className="mono-label text-[color:var(--muted)]">Logs</p>
+        <p className="mono-label text-[color:var(--muted)]">Historico</p>
+        {events.length ? (
+          events.map((event) => (
+            <div
+              className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)] p-4 text-sm"
+              key={event.id}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-semibold">{event.eventType}</p>
+                <span className="text-xs text-[color:var(--muted)]">
+                  {formatUtcDateTime(event.createdAt)}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-[color:var(--muted)]">{event.description}</p>
+            </div>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-dashed border-[color:var(--line)] px-4 py-5 text-sm text-[color:var(--muted)]">
+            Nenhum evento registrado ainda.
+          </p>
+        )}
+        <p className="mono-label text-[color:var(--muted)]">Logs de assinatura</p>
         {logs.length ? (
           logs.map((log) => (
             <div
@@ -1390,19 +1490,31 @@ function ContractSignaturesPanel({ contract }: { contract: ApiContract }) {
                 <div className="min-w-0">
                   <p className="font-semibold">{log.role} - {log.signerName}</p>
                   <p className="truncate text-xs text-[color:var(--muted)]">
-                    CPF: {log.signerCpf ?? "-"} | IP: {log.ipAddress ?? "-"}
+                    CPF: {log.signerCpf ?? "-"} | E-mail: {log.signerEmail ?? "-"}
+                  </p>
+                  <p className="truncate text-xs text-[color:var(--muted)]">
+                    IP: {log.ipAddress ?? "-"}
                   </p>
                 </div>
                 <span className="text-xs text-[color:var(--muted)]">
-                  {formatDateTime(log.signedAt)}
+                  {formatUtcDateTime(log.signedAt)}
                 </span>
               </div>
               <p className="mt-3 truncate font-mono text-xs text-[color:var(--muted)]">
+                User-Agent: {log.userAgent ?? "-"}
+              </p>
+              <p className="mt-1 truncate font-mono text-xs text-[color:var(--muted)]">
                 Token: {log.tokenHash ?? "-"}
               </p>
               <p className="mt-1 truncate font-mono text-xs text-[color:var(--muted)]">
                 Doc: {log.documentHash ?? "-"}
               </p>
+              {log.latitude != null && log.longitude != null ? (
+                <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+                  Geo: {log.latitude.toFixed(6)}, {log.longitude.toFixed(6)}
+                  {log.geoAccuracy != null ? ` (~${Math.round(log.geoAccuracy)}m)` : ""}
+                </p>
+              ) : null}
             </div>
           ))
         ) : (
@@ -2213,7 +2325,7 @@ export function FinancialPage() {
             <div className="flex w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1 sm:w-auto">
               {(["Day", "Week", "Month"] as const).map((mode) => (
                 <button
-                  className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${view === mode ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
+                  className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${view === mode ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-zinc-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
                   key={mode}
                   onClick={() => setView(mode)}
                   type="button"
@@ -2253,7 +2365,7 @@ export function FinancialPage() {
                       {weekdayLabel(day)}
                     </p>
                     <button
-                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-zinc-950" : "hover:bg-[color:var(--accent)]/10"}`}
                       onClick={() => {
                         setCurrentDate(day);
                         setView("Day");
@@ -2640,7 +2752,7 @@ function FinancialMonthCalendar({
               key={day.toISOString()}
             >
               <button
-                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-zinc-950" : "hover:bg-[color:var(--accent)]/10"}`}
                 onClick={() => onDayClick(day)}
                 type="button"
               >
@@ -2857,7 +2969,7 @@ export function AppointmentsPage() {
           <div className="flex w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1 sm:w-auto">
             {(["Day", "Week", "Month"] as const).map((view) => (
               <button
-                className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${selectedView === view ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
+                className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition sm:flex-none sm:px-4 ${selectedView === view ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-zinc-950" : "text-[color:var(--muted)] hover:text-[color:var(--text)]"}`}
                 key={view}
                 onClick={() => {
                   setSelectedView(view);
@@ -2906,7 +3018,7 @@ export function AppointmentsPage() {
                       {weekdayLabel(day)}
                     </p>
                     <button
-                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                      className={`mx-auto mt-2 grid h-8 w-8 cursor-pointer place-items-center rounded-full font-display text-base font-bold sm:h-11 sm:w-11 sm:text-2xl ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white shadow-[0_0_24px_color-mix(in_srgb,var(--accent)_60%,transparent)] dark:bg-[color:var(--warning)] dark:text-zinc-950" : "hover:bg-[color:var(--accent)]/10"}`}
                       onClick={() => {
                         setCurrentDate(day);
                         setSelectedView("Day");
@@ -3173,7 +3285,7 @@ export function AppointmentsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         {weekdayShortLabels.map((label, index) => (
                           <button
-                            className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${form.repeatWeekdays.includes(index) ? "border-[color:var(--primary)] bg-[color:var(--primary)] text-white dark:border-[color:var(--warning)] dark:bg-[color:var(--warning)] dark:text-navy-950" : "border-[color:var(--line)] bg-[color:var(--panel-strong)] text-[color:var(--muted)]"}`}
+                            className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${form.repeatWeekdays.includes(index) ? "border-[color:var(--primary)] bg-[color:var(--primary)] text-white dark:border-[color:var(--warning)] dark:bg-[color:var(--warning)] dark:text-zinc-950" : "border-[color:var(--line)] bg-[color:var(--panel-strong)] text-[color:var(--muted)]"}`}
                             key={label}
                             type="button"
                             onClick={() =>
@@ -3696,6 +3808,14 @@ function CrudPage<T extends { id: string }>({
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<T | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  const handleFocus = useCallback((id: string) => {
+    setFocusedId(id);
+    scrollToFocusRow(id);
+  }, []);
+
+  useFocusFromUrl(handleFocus);
 
   const mutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
@@ -3811,7 +3931,8 @@ function CrudPage<T extends { id: string }>({
             ) : null}
             {filteredData.map((row) => (
               <tr
-                className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
+                className={`border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)] ${focusRowClass(row.id, focusedId)}`}
+                id={`focus-row-${row.id}`}
                 key={row.id}
               >
                 {columns.map((column) => {
@@ -4237,44 +4358,23 @@ function latestContractUrl(contract: ApiContract) {
   return contract.signedFileUrl ?? contract.versions?.[contract.versions.length - 1]?.fileUrl;
 }
 
-function contractParticipants(contract: ApiContract) {
-  return [
-    { label: "Contratante", user: contract.contractingParty, signedAt: contract.contractingPartySignedAt },
-    { label: "Contratado", user: contract.contractor, signedAt: contract.contractorSignedAt },
-    { label: "Testemunha 1", user: contract.witnessOne, signedAt: contract.witnessOneSignedAt },
-    { label: "Testemunha 2", user: contract.witnessTwo, signedAt: contract.witnessTwoSignedAt },
-  ];
-}
-
-function formatDateTime(value?: string) {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("pt-BR");
-}
-
 function isContractReadyToSend(contract: ApiContract) {
-  const participantIds = [
-    contract.contractingPartyId,
-    contract.contractorId,
-    contract.witnessOneId,
-    contract.witnessTwoId,
-  ];
+  const hasContractingParty = (contract.participants ?? []).some(
+    (participant) => participant.role === "CONTRACTING_PARTY",
+  );
   return Boolean(
     contract.status === "DRAFT" &&
       contract.title.trim() &&
       Number(contract.value) > 0 &&
       latestContractUrl(contract) &&
-      participantIds.every(Boolean) &&
-      new Set(participantIds).size === 4,
+      hasContractingParty,
   );
 }
 
 function canCurrentUserSignContract(contract: ApiContract, userId?: string) {
   if (!userId || contract.status !== "SENT") return false;
-  if (contract.contractingPartyId === userId) return !contract.contractingPartySignedAt;
-  if (contract.contractorId === userId) return !contract.contractorSignedAt;
-  if (contract.witnessOneId === userId) return !contract.witnessOneSignedAt;
-  if (contract.witnessTwoId === userId) return !contract.witnessTwoSignedAt;
-  return false;
+  const participant = (contract.participants ?? []).find((entry) => entry.user.id === userId);
+  return Boolean(participant && !participant.signedAt);
 }
 
 function readStoredUserId() {
@@ -4291,11 +4391,17 @@ function defaultContractForm() {
     title: "",
     value: "0",
     contractingPartyId: "",
-    contractorId: "",
-    witnessOneId: "",
-    witnessTwoId: "",
     file: null as File | null,
   };
+}
+
+function formatUtcDateTime(value?: string) {
+  if (!value) return "-";
+  return `${new Date(value).toISOString().replace("T", " ").slice(0, 19)} UTC`;
+}
+
+function focusRowClass(id: string, focusedId: string | null) {
+  return focusedId === id ? "bg-[color:var(--panel-strong)] ring-2 ring-inset ring-[color:var(--primary)]" : "";
 }
 
 function contractFileUrl(url: string) {
@@ -4691,7 +4797,7 @@ function MonthCalendar({
               key={day.toISOString()}
             >
               <button
-                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-navy-950" : "hover:bg-[color:var(--accent)]/10"}`}
+                className={`mb-2 grid h-7 w-7 cursor-pointer place-items-center rounded-full font-display text-sm font-semibold sm:h-8 sm:w-8 sm:text-base ${isSameDate(day, today) ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-zinc-950" : "hover:bg-[color:var(--accent)]/10"}`}
                 onClick={() => onDayClick(day)}
                 type="button"
               >

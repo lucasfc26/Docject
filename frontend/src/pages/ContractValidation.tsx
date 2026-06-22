@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { Download, ExternalLink, FileCheck2, ShieldCheck } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button, Panel, StatusBadge } from "../components/ui";
-import { apiAssetUrl, apiValidateContract, downloadApiAsset, type ApiContract } from "../services/api";
+import { apiAssetUrl, apiValidateContract, downloadApiAsset, sortedContractParticipants, contractParticipantLabel, type ApiContract } from "../services/api";
 
 export function ContractValidation() {
   const [code, setCode] = useState("");
@@ -102,14 +102,24 @@ export function ContractValidation() {
               </Button>
             </div>
             <div className="mt-6 grid gap-3 md:grid-cols-2">
-              {(contract.signatureLogs ?? []).map((log) => (
-                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4" key={log.id}>
-                  <p className="font-semibold">{log.role} - {log.signerName}</p>
+              {(contract.eventLogs ?? []).map((event) => (
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 md:col-span-2" key={event.id}>
+                  <p className="text-xs text-[color:var(--muted)]">{new Date(event.createdAt).toISOString().replace("T", " ").slice(0, 19)} UTC</p>
+                  <p className="mt-1 text-sm">{event.description}</p>
+                </div>
+              ))}
+              {sortedContractParticipants(contract).map((participant) => (
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4" key={participant.id}>
+                  <p className="font-semibold">
+                    {contractParticipantLabel(participant.role, participant.witnessIndex)} - {participant.user.name}
+                  </p>
                   <p className="mt-1 text-xs text-[color:var(--muted)]">
-                    CPF: {log.signerCpf ?? "-"} | IP: {log.ipAddress ?? "-"}
+                    CPF: {participant.user.cpf ?? "-"} | E-mail: {participant.user.email}
                   </p>
                   <p className="mt-2 text-xs text-[color:var(--muted)]">
-                    {new Date(log.signedAt).toLocaleString("pt-BR")}
+                    {participant.signedAt
+                      ? `Assinado em ${new Date(participant.signedAt).toISOString().replace("T", " ").slice(0, 19)} UTC`
+                      : "Assinatura pendente"}
                   </p>
                 </div>
               ))}

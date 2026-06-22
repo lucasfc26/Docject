@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, Download, ExternalLink, FileSignature, MessageSquare, ReceiptText, Server } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
-import { apiAssetUrl, apiGet, apiPost, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
+import { apiAssetUrl, apiGet, apiPost, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: clients = [] } = useQuery({ queryKey: ["clients"], queryFn: () => apiGet<ApiClient[]>("/clients") });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => apiGet<ApiProject[]>("/projects") });
   const { data: services = [] } = useQuery({ queryKey: ["services"], queryFn: () => apiGet<ApiService[]>("/services") });
@@ -19,6 +21,24 @@ export function ClientPortal() {
   const [selectedContractId, setSelectedContractId] = useState("");
   const user = readStoredUser();
   const isClientUser = user?.role === "CLIENT";
+
+  useEffect(() => {
+    const focusId = searchParams.get("focus");
+    const requestedView = searchParams.get("view");
+    if (requestedView === "projects" || requestedView === "services" || requestedView === "contracts") {
+      setView(requestedView);
+    }
+    if (focusId) {
+      if (requestedView === "contracts") setSelectedContractId(focusId);
+      if (requestedView === "projects") setSelectedProjectId(focusId);
+      if (requestedView === "services") setSelectedServiceId(focusId);
+    }
+    if (!focusId && !requestedView) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("focus");
+    next.delete("view");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const selectedClient = clients.find((client) => client.id === selectedClientId) ?? clients[0];
   const projectOptions = useMemo(() => {
@@ -342,13 +362,34 @@ function ContractSignatureView({
   onSigned: () => void;
 }) {
   const [password, setPassword] = useState("");
+  const [shareLocation, setShareLocation] = useState(false);
+  const [participantEmail, setParticipantEmail] = useState("");
+  const [participantRole, setParticipantRole] = useState<"CONTRACTOR" | "WITNESS">("CONTRACTOR");
   const signMutation = useMutation({
-    mutationFn: () => apiPost<ApiContract>(`/contracts/${contract?.id}/sign`, { password }),
+    mutationFn: async () => {
+      return apiPost<ApiContract>(
+        `/contracts/${contract?.id}/sign`,
+        await buildContractSignPayload(password, shareLocation),
+      );
+    },
     onSuccess: () => {
       setPassword("");
+      setShareLocation(false);
       onSigned();
     },
     meta: { successMessage: "Contrato assinado com sucesso." },
+  });
+  const addParticipantMutation = useMutation({
+    mutationFn: () =>
+      apiPost<ApiContract>(`/contracts/${contract?.id}/participants`, {
+        email: participantEmail.trim(),
+        role: participantRole,
+      }),
+    onSuccess: () => {
+      setParticipantEmail("");
+      onSigned();
+    },
+    meta: { successMessage: "Participante adicionado ao contrato." },
   });
 
   if (!contract) {
@@ -365,12 +406,13 @@ function ContractSignatureView({
   const role = userId ? contractParticipantRole(contract, userId) : undefined;
   const alreadySigned = userId ? hasSignedContract(contract, userId) : false;
   const canSign = contract.status === "SENT" && Boolean(role) && !alreadySigned;
-  const participants = [
-    { label: "Contratante", user: contract.contractingParty, signedAt: contract.contractingPartySignedAt },
-    { label: "Contratado", user: contract.contractor, signedAt: contract.contractorSignedAt },
-    { label: "Testemunha 1", user: contract.witnessOne, signedAt: contract.witnessOneSignedAt },
-    { label: "Testemunha 2", user: contract.witnessTwo, signedAt: contract.witnessTwoSignedAt },
-  ];
+  const participants = sortedContractParticipants(contract);
+  const isContractingParty = participants.some(
+    (participant) => participant.user.id === userId && participant.role === "CONTRACTING_PARTY",
+  );
+  const hasContractor = participants.some((participant) => participant.role === "CONTRACTOR");
+  const canAddParticipants =
+    isContractingParty && (contract.status === "DRAFT" || contract.status === "SENT");
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -418,6 +460,17 @@ function ContractSignatureView({
                 onChange={(event) => setPassword(event.target.value)}
               />
             </label>
+            <label className="flex items-start gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm">
+              <input
+                checked={shareLocation}
+                className="mt-1"
+                type="checkbox"
+                onChange={(event) => setShareLocation(event.target.checked)}
+              />
+              <span className="text-[color:var(--muted)]">
+                Compartilhar localizacao aproximada no registro da assinatura (opcional).
+              </span>
+            </label>
             <Button disabled={signMutation.isPending || !password} type="submit">
               <FileSignature size={17} />
               Assinar
@@ -432,15 +485,15 @@ function ContractSignatureView({
           {participants.map((participant) => (
             <div
               className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4"
-              key={participant.label}
+              key={participant.id}
             >
               <div className="min-w-0">
-                <p className="text-sm text-[color:var(--muted)]">{participant.label}</p>
-                <p className="truncate font-semibold">
-                  {participant.user?.name ?? "Conta nao vinculada"}
+                <p className="text-sm text-[color:var(--muted)]">
+                  {contractParticipantLabel(participant.role, participant.witnessIndex)}
                 </p>
+                <p className="truncate font-semibold">{participant.user.name}</p>
                 <p className="truncate text-xs text-[color:var(--muted)]">
-                  {participant.user?.email ?? "-"} | CPF: {participant.user?.cpf ?? "-"}
+                  {participant.user.email} | CPF: {participant.user.cpf ?? "-"}
                 </p>
               </div>
               <StatusBadge tone={participant.signedAt ? "success" : "warning"}>
@@ -449,6 +502,55 @@ function ContractSignatureView({
             </div>
           ))}
         </div>
+        {canAddParticipants ? (
+          <div className="mt-5 rounded-2xl border border-dashed border-[color:var(--line)] p-4">
+            <p className="mono-label text-[color:var(--muted)]">Adicionar participante</p>
+            <div className="mt-3 grid gap-3">
+              <select
+                className="w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm outline-none"
+                value={participantRole}
+                onChange={(event) => setParticipantRole(event.target.value as "CONTRACTOR" | "WITNESS")}
+              >
+                <option disabled={hasContractor} value="CONTRACTOR">
+                  Contratado
+                </option>
+                <option value="WITNESS">Testemunha</option>
+              </select>
+              <input
+                className="w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm outline-none"
+                placeholder="E-mail da conta do participante"
+                type="email"
+                value={participantEmail}
+                onChange={(event) => setParticipantEmail(event.target.value)}
+              />
+              <Button
+                disabled={
+                  addParticipantMutation.isPending ||
+                  !participantEmail.trim() ||
+                  (participantRole === "CONTRACTOR" && hasContractor)
+                }
+                type="button"
+                variant="secondary"
+                onClick={() => addParticipantMutation.mutate()}
+              >
+                Adicionar
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        {(contract.eventLogs ?? []).length ? (
+          <div className="mt-5 grid gap-2">
+            <p className="mono-label text-[color:var(--muted)]">Historico</p>
+            {(contract.eventLogs ?? []).map((event) => (
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-3 text-xs" key={event.id}>
+                <p className="text-[color:var(--muted)]">
+                  {new Date(event.createdAt).toISOString().replace("T", " ").slice(0, 19)} UTC
+                </p>
+                <p className="mt-1">{event.description}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
         {role && alreadySigned ? (
           <p className="mt-4 text-sm text-[color:var(--muted)]">
             Sua assinatura ja foi registrada como {role}.
@@ -484,23 +586,18 @@ function contractStatusTone(status: string) {
 }
 
 function isContractParticipant(contract: ApiContract, userId: string) {
-  return [contract.contractingPartyId, contract.contractorId, contract.witnessOneId, contract.witnessTwoId].includes(userId);
+  return (contract.participants ?? []).some((participant) => participant.user.id === userId);
 }
 
 function contractParticipantRole(contract: ApiContract, userId: string) {
-  if (contract.contractingPartyId === userId) return "contratante";
-  if (contract.contractorId === userId) return "contratado";
-  if (contract.witnessOneId === userId) return "testemunha 1";
-  if (contract.witnessTwoId === userId) return "testemunha 2";
-  return undefined;
+  const participant = (contract.participants ?? []).find((entry) => entry.user.id === userId);
+  if (!participant) return undefined;
+  return contractParticipantLabel(participant.role, participant.witnessIndex).toLowerCase();
 }
 
 function hasSignedContract(contract: ApiContract, userId: string) {
-  if (contract.contractingPartyId === userId) return Boolean(contract.contractingPartySignedAt);
-  if (contract.contractorId === userId) return Boolean(contract.contractorSignedAt);
-  if (contract.witnessOneId === userId) return Boolean(contract.witnessOneSignedAt);
-  if (contract.witnessTwoId === userId) return Boolean(contract.witnessTwoSignedAt);
-  return false;
+  const participant = (contract.participants ?? []).find((entry) => entry.user.id === userId);
+  return Boolean(participant?.signedAt);
 }
 
 function translateHealth(status: string) {

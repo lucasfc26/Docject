@@ -38,11 +38,8 @@ export function contractScope(user?: CurrentUser) {
     return {
       OR: [
         { client: { users: { some: { id: user.sub } } } },
-        { contractingPartyId: user.sub },
-        { contractorId: user.sub },
-        { witnessOneId: user.sub },
-        { witnessTwoId: user.sub }
-      ]
+        { participants: { some: { userId: user.sub } } },
+      ],
     };
   }
   if (user.role === "ADMIN") return { OR: [{ client: { ownerId: user.sub } }, { clientId: null }] };

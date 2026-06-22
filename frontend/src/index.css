@@ -19,16 +19,16 @@
 
 .dark {
   color-scheme: dark;
-  --bg: #07172b;
-  --bg-soft: #0b213c;
-  --panel: rgba(13, 52, 84, 0.58);
-  --panel-strong: #0b213c;
-  --line: rgba(217, 236, 255, 0.12);
-  --text: #eef6ff;
-  --muted: #9aabba;
-  --primary: #6eb9f2;
-  --accent: #a9d5ff;
-  --success: #8a94a3;
+  --bg: #09090b;
+  --bg-soft: #111113;
+  --panel: rgba(24, 24, 27, 0.78);
+  --panel-strong: #18181b;
+  --line: rgba(255, 255, 255, 0.1);
+  --text: #fafafa;
+  --muted: #a1a1aa;
+  --primary: #e4e4e7;
+  --accent: #d4d4d8;
+  --success: #71717a;
   --warning: #ff8a3d;
 }
 
@@ -46,6 +46,12 @@ body {
   color: var(--text);
   font-family: Geist, Inter, system-ui, sans-serif;
   letter-spacing: 0;
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at 14% 12%, color-mix(in srgb, white 4%, transparent), transparent 26rem),
+    linear-gradient(135deg, var(--bg), var(--bg-soft));
 }
 
 button,
@@ -111,7 +117,7 @@ button {
 }
 
 .dark .progress-fill {
-  background: linear-gradient(90deg, var(--accent), var(--warning));
+  background: linear-gradient(90deg, #52525b, #d4d4d8);
 }
 
 @media (max-width: 980px) {

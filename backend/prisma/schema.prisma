@@ -23,6 +23,21 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum ContractParticipantRole {
+  CONTRACTING_PARTY
+  CONTRACTOR
+  WITNESS
+}
+
+enum ContractEventType {
+  CREATED
+  PARTICIPANT_ADDED
+  SENT
+  SIGNED
+  FINALIZED
+  CANCELLED
+}
+
 enum ContractStatus {
   DRAFT
   SENT
@@ -52,10 +67,10 @@ model User {
   admin         User?          @relation("AdminStaff", fields: [adminId], references: [id])
   adminId       String?
   staffUsers    User[]         @relation("AdminStaff")
-  contractsAsContractingParty Contract[] @relation("ContractContractingParty")
-  contractsAsContractor Contract[] @relation("ContractContractor")
-  contractsAsWitnessOne Contract[] @relation("ContractWitnessOne")
-  contractsAsWitnessTwo Contract[] @relation("ContractWitnessTwo")
+  contractParticipants ContractParticipant[]
+  participantsAdded    ContractParticipant[] @relation("ParticipantAddedBy")
+  contractsCreated     Contract[]            @relation("ContractCreatedBy")
+  contractEvents       ContractEventLog[]
   signatureLogs ContractSignatureLog[]
   refreshTokens RefreshToken[]
   createdAt     DateTime       @default(now())
@@ -149,18 +164,10 @@ model Contract {
   status             ContractStatus @default(DRAFT)
   client             Client?        @relation(fields: [clientId], references: [id])
   clientId           String?
-  contractingParty   User?          @relation("ContractContractingParty", fields: [contractingPartyId], references: [id])
-  contractingPartyId String?
-  contractor         User?          @relation("ContractContractor", fields: [contractorId], references: [id])
-  contractorId       String?
-  witnessOne         User?          @relation("ContractWitnessOne", fields: [witnessOneId], references: [id])
-  witnessOneId       String?
-  witnessTwo         User?          @relation("ContractWitnessTwo", fields: [witnessTwoId], references: [id])
-  witnessTwoId       String?
-  contractingPartySignedAt DateTime?
-  contractorSignedAt DateTime?
-  witnessOneSignedAt DateTime?
-  witnessTwoSignedAt DateTime?
+  createdBy          User?          @relation("ContractCreatedBy", fields: [createdById], references: [id])
+  createdById        String?
+  participants       ContractParticipant[]
+  eventLogs          ContractEventLog[]
   originalDocumentHash String?
   signedDocumentHash String?
   signedFileUrl       String?
@@ -171,6 +178,40 @@ model Contract {
   versions           ContractVersion[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+}
+
+model ContractParticipant {
+  id           String                  @id @default(uuid())
+  contract     Contract                @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId   String
+  user         User                    @relation(fields: [userId], references: [id])
+  userId       String
+  role         ContractParticipantRole
+  witnessIndex Int?
+  signedAt     DateTime?
+  addedAt      DateTime                @default(now())
+  addedBy      User?                   @relation("ParticipantAddedBy", fields: [addedById], references: [id])
+  addedById    String?
+
+  @@unique([contractId, userId])
+  @@index([contractId])
+}
+
+model ContractEventLog {
+  id          String            @id @default(uuid())
+  contract    Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId  String
+  eventType   ContractEventType
+  actor       User?             @relation(fields: [actorUserId], references: [id])
+  actorUserId String?
+  actorName   String?
+  actorEmail  String?
+  description String
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime          @default(now())
+
+  @@index([contractId])
 }
 
 model ContractVersion {
@@ -192,6 +233,10 @@ model ContractSignatureLog {
   signerEmail    String?
   signerCpf      String?
   ipAddress      String?
+  userAgent      String?
+  latitude       Float?
+  longitude      Float?
+  geoAccuracy    Float?
   tokenHash      String?
   documentHash   String?
   signedAt       DateTime @default(now())

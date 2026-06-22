@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { PrismaService } from "../../prisma/prisma.service";
+import { listContractParticipants, participantSignLabel } from "./contracts.helpers";
 
 const uploadPrefix = "/uploads/contracts/";
 
@@ -16,11 +17,13 @@ export class ContractPdfService {
       where: { id: contractId },
       include: {
         versions: true,
-        signatureLogs: { orderBy: { signedAt: "asc" as const } },
-        contractingParty: true,
-        contractor: true,
-        witnessOne: true,
-        witnessTwo: true,
+        createdBy: true,
+        participants: {
+          orderBy: [{ role: "asc" }, { witnessIndex: "asc" }, { addedAt: "asc" }],
+          include: { user: true, addedBy: true },
+        },
+        eventLogs: { orderBy: { createdAt: "asc" } },
+        signatureLogs: { orderBy: { signedAt: "asc" } },
       },
     });
     if (!contract) throw new Error("Contrato nao encontrado.");
@@ -43,13 +46,9 @@ export class ContractPdfService {
       title: contract.title,
       originalDocumentHash,
       validationCode,
-      participants: [
-        { role: "Contratante", user: contract.contractingParty, signedAt: contract.contractingPartySignedAt },
-        { role: "Contratado", user: contract.contractor, signedAt: contract.contractorSignedAt },
-        { role: "Testemunha 1", user: contract.witnessOne, signedAt: contract.witnessOneSignedAt },
-        { role: "Testemunha 2", user: contract.witnessTwo, signedAt: contract.witnessTwoSignedAt },
-      ],
-      logs: contract.signatureLogs,
+      participants: listContractParticipants(contract.participants),
+      eventLogs: contract.eventLogs,
+      signatureLogs: contract.signatureLogs,
     });
 
     const signedBytes = await pdf.save();
@@ -79,11 +78,16 @@ export class ContractPdfService {
       include: {
         versions: true,
         client: true,
-        signatureLogs: { orderBy: { signedAt: "asc" as const } },
-        contractingParty: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-        contractor: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-        witnessOne: { select: { id: true, name: true, email: true, role: true, cpf: true } },
-        witnessTwo: { select: { id: true, name: true, email: true, role: true, cpf: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+        participants: {
+          orderBy: [{ role: "asc" }, { witnessIndex: "asc" }, { addedAt: "asc" }],
+          include: {
+            user: { select: { id: true, name: true, email: true, role: true, cpf: true } },
+            addedBy: { select: { id: true, name: true, email: true } },
+          },
+        },
+        eventLogs: { orderBy: { createdAt: "asc" } },
+        signatureLogs: { orderBy: { signedAt: "asc" } },
       },
     });
   }
@@ -98,13 +102,28 @@ function addSignatureLogPages(
     title: string;
     originalDocumentHash: string;
     validationCode: string;
-    participants: Array<{ role: string; user: { name: string; email: string; cpf?: string | null } | null; signedAt?: Date | null }>;
-    logs: Array<{
+    participants: Array<{
+      role: string;
+      witnessIndex?: number | null;
+      signedAt?: Date | null;
+      user?: { name: string; email: string; cpf?: string | null } | null;
+    }>;
+    eventLogs: Array<{
+      description: string;
+      createdAt: Date;
+      actorName?: string | null;
+      actorEmail?: string | null;
+    }>;
+    signatureLogs: Array<{
       role: string;
       signerName: string;
       signerEmail?: string | null;
       signerCpf?: string | null;
       ipAddress?: string | null;
+      userAgent?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      geoAccuracy?: number | null;
       tokenHash?: string | null;
       documentHash?: string | null;
       signedAt: Date;
@@ -123,23 +142,39 @@ function addSignatureLogPages(
     cursor -= size + 8;
   };
 
-  line("Registro de assinaturas Docject", 16, bold);
-  line(`Contrato: ${data.title}`, 11, bold);
-  line(`UUID: ${data.contractId}`);
-  line(`Hash SHA-256 do documento original: ${data.originalDocumentHash}`);
+  line(`${data.title}`, 14, bold);
+  line(`Documento numero #${data.contractId}`, 11, bold);
+  line(`Hash do documento original (SHA256): ${data.originalDocumentHash}`);
   cursor -= 8;
-  line("Participantes", 13, bold);
+
+  line("Assinaturas", 13, bold);
   for (const participant of data.participants) {
-    line(`${participant.role}: ${participant.user?.name ?? "Nao vinculado"} | CPF: ${participant.user?.cpf ?? "-"} | ${participant.signedAt ? `Assinado em ${formatDate(participant.signedAt)}` : "Pendente"}`);
+    if (!participant.signedAt || !participant.user) continue;
+    line(participant.user.name, 11, bold);
+    line(`CPF: ${participant.user.cpf ?? "-"}`);
+    line(`${participantSignLabel(participant.role, participant.witnessIndex)} em ${formatBrDateTime(participant.signedAt)}`);
+    cursor -= 4;
   }
 
   cursor -= 8;
-  line("Logs de assinatura", 13, bold);
-  for (const log of data.logs) {
-    line(`${log.role} | ${log.signerName} | CPF: ${log.signerCpf ?? "-"} | ${formatDate(log.signedAt)}`, 10, bold);
-    line(`Email: ${log.signerEmail ?? "-"} | IP: ${log.ipAddress ?? "-"}`);
+  line("Log", 13, bold);
+  line("Datas e horarios em UTC", 9);
+  for (const event of data.eventLogs) {
+    line(`${formatBrDateTime(event.createdAt)} ${event.description}`, 9);
+    cursor -= 2;
+  }
+
+  cursor -= 8;
+  line("Detalhes tecnicos das assinaturas", 13, bold);
+  for (const log of data.signatureLogs) {
+    line(`${log.role} | ${log.signerName} | ${formatUtcDate(log.signedAt)}`, 10, bold);
+    line(`Email: ${log.signerEmail ?? "-"} | CPF: ${log.signerCpf ?? "-"} | IP: ${log.ipAddress ?? "-"}`);
+    line(`User-Agent: ${truncate(log.userAgent, 90) ?? "-"}`);
     line(`Token SHA-256: ${log.tokenHash ?? "-"}`);
     line(`Hash documento no momento da assinatura: ${log.documentHash ?? "-"}`);
+    if (log.latitude != null && log.longitude != null) {
+      line(`Geolocalizacao: ${log.latitude.toFixed(6)}, ${log.longitude.toFixed(6)} (precisao ~${Math.round(log.geoAccuracy ?? 0)}m)`);
+    }
     cursor -= 4;
   }
 
@@ -182,10 +217,19 @@ function normalizeValidationCode(value: string) {
   return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-function formatDate(value: Date) {
+function formatBrDateTime(value: Date) {
   return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
+    dateStyle: "medium",
     timeStyle: "medium",
     timeZone: "America/Fortaleza",
   }).format(value);
+}
+
+function formatUtcDate(value: Date) {
+  return `${value.toISOString().replace("T", " ").slice(0, 19)} UTC`;
+}
+
+function truncate(value?: string | null, max = 115) {
+  if (!value) return undefined;
+  return value.length > max ? `${value.slice(0, max - 3)}...` : value;
 }

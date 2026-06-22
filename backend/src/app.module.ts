@@ -19,6 +19,7 @@ import { ServicesModule } from "./modules/services/services.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { UsersModule } from "./modules/users/users.module";
+import { SearchModule } from "./modules/search/search.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
 @Module({
@@ -45,7 +46,8 @@ import { PrismaModule } from "./prisma/prisma.module";
     SettingsModule,
     UploadsModule,
     ActivityModule,
-    IntegrationsModule
+    IntegrationsModule,
+    SearchModule
   ],
   providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }]
 })

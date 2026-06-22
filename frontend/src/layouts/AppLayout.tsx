@@ -13,7 +13,6 @@ import {
   LogOut,
   Menu,
   Moon,
-  Search,
   Settings,
   Sun,
   UserCog,
@@ -31,6 +30,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 import { Button } from "../components/ui";
+import { GlobalSearch } from "../components/GlobalSearch";
 import { apiGet, apiPatch, logout, type ApiFeature } from "../services/api";
 import { useThemeStore } from "../stores/theme";
 
@@ -155,16 +155,7 @@ export function AppLayout() {
             </div>
           </div>
 
-          <div className="hidden min-w-80 items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-4 py-2 xl:flex">
-            <Search size={18} className="text-[color:var(--muted)]" />
-            <input
-              className="w-full bg-transparent text-sm outline-none placeholder:text-[color:var(--muted)]"
-              placeholder="Buscar cliente, projeto ou contrato..."
-              onKeyDown={(event) => {
-                if (event.key === "Enter") navigate("/projects");
-              }}
-            />
-          </div>
+          <GlobalSearch role={user.role} />
 
           <div className="absolute left-1/2 flex -translate-x-1/2 items-center justify-center lg:hidden">
             <img

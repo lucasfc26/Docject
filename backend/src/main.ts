@@ -8,6 +8,7 @@ import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.set("trust proxy", true);
   app.setGlobalPrefix("api");
   app.useStaticAssets(join(process.cwd(), "uploads"), { prefix: "/uploads/" });
   app.use(helmet());
