@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
 import { randomBytes, randomInt } from "crypto";
@@ -9,6 +9,8 @@ const passwordResetTtlMs = 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -108,21 +110,28 @@ export class AuthService {
       const codeHash = await bcrypt.hash(code, 10);
       const expiresAt = new Date(Date.now() + passwordResetTtlMs);
 
-      await this.prisma.passwordResetToken.deleteMany({
-        where: { userId: user.id, usedAt: null },
-      });
+      try {
+        await this.prisma.passwordResetToken.deleteMany({
+          where: { userId: user.id, usedAt: null },
+        });
 
-      await this.prisma.passwordResetToken.create({
-        data: { userId: user.id, codeHash, expiresAt },
-      });
+        await this.prisma.passwordResetToken.create({
+          data: { userId: user.id, codeHash, expiresAt },
+        });
 
-      const resetUrl = `${publicAppUrl("/reset-password")}?email=${encodeURIComponent(user.email)}`;
-      await this.mail.sendPasswordResetCode({
-        to: user.email,
-        name: user.name,
-        code,
-        resetUrl,
-      });
+        const resetUrl = `${publicAppUrl("/reset-password")}?email=${encodeURIComponent(user.email)}`;
+        await this.mail.sendPasswordResetCode({
+          to: user.email,
+          name: user.name,
+          code,
+          resetUrl,
+        });
+      } catch (error) {
+        await this.prisma.passwordResetToken.deleteMany({
+          where: { userId: user.id, usedAt: null },
+        });
+        this.logger.error(`Falha ao enviar codigo de recuperacao para ${user.email}`, error);
+      }
     }
 
     return {

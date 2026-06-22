@@ -27,6 +27,5 @@ RUN npx prisma generate
 
 EXPOSE 3000
 
-# Schema e atualizacoes de banco sao aplicados manualmente com:
-# docker compose exec backend npx prisma db push
-CMD ["node", "dist/main.js"]
+# Sincroniza o schema do banco antes de subir (evita tabelas faltando apos deploy)
+CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/main.js"]

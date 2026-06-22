@@ -48,6 +48,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 docker compose -f docker-compose.prod.yml --env-file .env.prod exec -T postgres \
   psql -U projectfy -d projectfy < backend/prisma/scripts/migrate-legacy-contract-participants.sql
 
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+# O backend ja roda prisma db push na subida. Se precisar forcar manualmente:
 docker compose -f docker-compose.prod.yml --env-file .env.prod exec backend npx prisma db push
 docker compose -f docker-compose.prod.yml --env-file .env.prod restart backend frontend
 
