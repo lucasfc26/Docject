@@ -351,7 +351,17 @@ function ServiceClientView({
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <span className="inline-flex items-center gap-2 text-sm font-semibold">
                     <HealthStatusDot online={online} pending={pending} />
-                    {pending ? "Verificando" : online ? "Online" : "Offline"}
+                    <span
+                      className={
+                        pending
+                          ? "text-[color:var(--muted)]"
+                          : online
+                            ? "text-mint-500"
+                            : "text-rose-500"
+                      }
+                    >
+                      {pending ? "Verificando" : online ? "Online" : "Offline"}
+                    </span>
                   </span>
                   {pending ? (
                     <StatusBadge tone="neutral">Pendente</StatusBadge>
@@ -696,10 +706,10 @@ function HealthStatusDot({
   pending?: boolean;
 }) {
   const tone = pending
-    ? "bg-[color:var(--muted)]"
+    ? "bg-zinc-400"
     : online
-      ? "bg-[color:var(--success)]"
-      : "bg-rose-500";
+      ? "bg-mint-500 shadow-[0_0_10px_rgba(22,168,115,0.85)]"
+      : "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.85)]";
   return (
     <span
       aria-hidden
