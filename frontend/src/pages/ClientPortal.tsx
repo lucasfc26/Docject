@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
-import { apiAssetUrl, apiGet, apiPost, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
+import { apiAssetUrl, apiGet, apiPost, downloadApiAsset, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
   const queryClient = useQueryClient();
@@ -69,7 +69,17 @@ export function ClientPortal() {
   const projectClient = selectedProject?.client?.name ?? selectedService?.client?.name ?? selectedClient?.name ?? "Cliente";
   const projectModules = useMemo(() => [...(selectedProject?.modules ?? [])].sort((a, b) => a.orderIndex - b.orderIndex), [selectedProject]);
   const currentModule = projectModules.find((module) => !isModuleCompleted(module)) ?? projectModules[projectModules.length - 1];
-  const contractUrl = selectedContract?.signedFileUrl ?? selectedContract?.versions?.at(-1)?.fileUrl;
+  const projectFinished =
+    selectedProject?.status === "COMPLETED" ||
+    selectedProgress >= 100 ||
+    (projectModules.length > 0 && projectModules.every(isModuleCompleted));
+  const projectFileUrl = selectedProject?.fileUrl;
+  const projectFileName = selectedProject?.fileName ?? undefined;
+  const serviceFileUrl = selectedService?.fileUrl;
+  const serviceFileName = selectedService?.fileName ?? undefined;
+  const downloadUrl = view === "services" ? serviceFileUrl : view === "projects" ? projectFileUrl : undefined;
+  const downloadName = view === "services" ? serviceFileName : projectFileName;
+  const showDownload = Boolean(downloadUrl);
   const supportPhone = (settings?.supportPhone || "").replace(/\D/g, "");
   const visibleTimeline = selectedProject?.modules?.length
     ? projectModules.map((module) => ({
@@ -123,9 +133,17 @@ export function ClientPortal() {
               </select>
             </label> : null}
             <div className="flex items-end gap-2">
-              <Button aria-label="Baixar contrato" variant="secondary" onClick={() => contractUrl && window.open(apiAssetUrl(contractUrl), "_blank", "noopener,noreferrer")} disabled={!contractUrl}>
-                <Download size={17} />
-              </Button>
+              {showDownload ? (
+                <Button
+                  aria-label="Baixar arquivo"
+                  variant="secondary"
+                  onClick={() =>
+                    downloadUrl && void downloadApiAsset(downloadUrl, downloadName)
+                  }
+                >
+                  <Download size={17} />
+                </Button>
+              ) : null}
               <Button aria-label="Suporte" onClick={() => supportPhone && window.open(`https://wa.me/${supportPhone}`, "_blank", "noopener,noreferrer")} disabled={!supportPhone}>
                 <MessageSquare size={17} />
               </Button>
@@ -200,10 +218,26 @@ export function ClientPortal() {
 
         <Panel className="p-6">
           <p className="mono-label text-[color:var(--muted)]">Proxima entrega</p>
-          <h2 className="mt-4 font-display text-2xl font-semibold">{currentModule?.name ?? selectedProject?.name ?? "Sem entrega selecionada"}</h2>
-          <p className="mt-2 text-[color:var(--muted)]">{currentModule ? moduleDescription(currentModule) : "Projeto filtrado por cliente e pronto para acompanhamento dos stakeholders."}</p>
+          <h2 className="mt-4 font-display text-2xl font-semibold">
+            {projectFinished
+              ? "Concluido"
+              : currentModule?.name ?? selectedProject?.name ?? "Sem entrega selecionada"}
+          </h2>
+          <p className="mt-2 text-[color:var(--muted)]">
+            {projectFinished
+              ? "Todas as entregas deste projeto foram concluidas."
+              : currentModule
+                ? moduleDescription(currentModule)
+                : "Projeto filtrado por cliente e pronto para acompanhamento dos stakeholders."}
+          </p>
           <div className="mt-6 flex items-center justify-between border-t border-[color:var(--line)] pt-5">
-            <StatusBadge tone="warning">{currentModule?.endDate ? new Date(currentModule.endDate).toLocaleDateString("pt-BR") : translateProject(selectedProject?.status ?? "PLANNING")}</StatusBadge>
+            <StatusBadge tone={projectFinished ? "success" : "warning"}>
+              {projectFinished
+                ? "Concluido"
+                : currentModule?.endDate
+                  ? new Date(currentModule.endDate).toLocaleDateString("pt-BR")
+                  : translateProject(selectedProject?.status ?? "PLANNING")}
+            </StatusBadge>
             <Button variant="secondary">
               <ReceiptText size={17} />
               Detalhes
@@ -301,6 +335,8 @@ function ServiceClientView({
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2">
           {healthItems.map((item) => {
+            const pending = item.status === "PENDING";
+            const online = pending ? undefined : Boolean(item.online);
             return (
               <a
                 className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 transition hover:border-[color:var(--accent)]"
@@ -309,11 +345,20 @@ function ServiceClientView({
                 rel="noreferrer"
                 target="_blank"
               >
-                <div className="mb-4 flex items-center justify-between">
-                  <Activity size={20} className="text-[color:var(--muted)]" />
-                  <StatusBadge tone={healthTone(item.status)}>
-                    {translateHealth(item.status)}
-                  </StatusBadge>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold">
+                    <HealthStatusDot online={online} pending={pending} />
+                    {pending ? "Verificando" : online ? "Online" : "Offline"}
+                  </span>
+                  {pending ? (
+                    <StatusBadge tone="neutral">Pendente</StatusBadge>
+                  ) : item.responseTimeMs == null ? (
+                    <StatusBadge tone="danger">Offline</StatusBadge>
+                  ) : (
+                    <StatusBadge tone={healthTone(item.status)}>
+                      {translateHealth(item.status)}
+                    </StatusBadge>
+                  )}
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -321,6 +366,27 @@ function ServiceClientView({
                     <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
                       {item.address}
                     </p>
+                    {item.summary ? (
+                      <p className="mt-2 text-sm text-[color:var(--muted)]">{item.summary}</p>
+                    ) : null}
+                    {item.components?.length ? (
+                      <div className="mt-3 grid gap-1.5">
+                        {item.components.map((component) => (
+                          <div
+                            className="flex items-center justify-between gap-3 text-xs"
+                            key={`${item.id ?? item.name}-${component.name}`}
+                          >
+                            <span className="inline-flex min-w-0 items-center gap-2">
+                              <HealthStatusDot online={component.online} />
+                              <span className="truncate font-semibold">{component.name}</span>
+                            </span>
+                            <span className="shrink-0 text-[color:var(--muted)]">
+                              {component.detail || (component.online ? "Online" : "Offline")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     <p className="mt-3 text-sm text-[color:var(--muted)]">
                       {item.responseTimeMs == null
                         ? "Sem resposta medida"
@@ -617,6 +683,26 @@ function healthTone(status: string) {
   if (status === "ATTENTION" || status === "SLOW" || status === "PENDING") return "warning";
   if (status === "OFFLINE") return "danger";
   return "neutral";
+}
+
+function HealthStatusDot({
+  online,
+  pending,
+}: {
+  online?: boolean;
+  pending?: boolean;
+}) {
+  const tone = pending
+    ? "bg-[color:var(--muted)]"
+    : online
+      ? "bg-[color:var(--success)]"
+      : "bg-rose-500";
+  return (
+    <span
+      aria-hidden
+      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${tone}`}
+    />
+  );
 }
 
 function healthCheckHref(address: string) {

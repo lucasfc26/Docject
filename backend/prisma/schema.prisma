@@ -134,6 +134,8 @@ model Project {
   budget    Decimal       @default(0)
   status    ProjectStatus @default(PLANNING)
   progress  Int           @default(0)
+  fileUrl   String?
+  fileName  String?
   client    Client        @relation(fields: [clientId], references: [id])
   clientId  String
   modules   ProjectModule[]
@@ -285,6 +287,8 @@ model Service {
   paymentDay     Int
   startDate      DateTime
   active         Boolean                @default(true)
+  fileUrl        String?
+  fileName       String?
   client         Client                 @relation(fields: [clientId], references: [id])
   clientId       String
   transactions   FinancialTransaction[]

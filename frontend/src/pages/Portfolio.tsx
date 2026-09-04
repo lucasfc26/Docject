@@ -10,6 +10,7 @@ import {
   Edit3,
   ExternalLink,
   Eye,
+  FileCheck,
   FileSignature,
   Filter,
   Focus,
@@ -23,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Fragment, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { scrollToFocusRow, useFocusFromUrl } from "../hooks/useFocusFromUrl";
@@ -35,6 +36,7 @@ import {
   apiPatch,
   apiPost,
   apiResetUserPassword,
+  apiUploadAttachment,
   apiUploadContractPdf,
   buildContractSignPayload,
   contractParticipantLabel,
@@ -224,6 +226,9 @@ export function ProjectsPage() {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [form, setForm] = useState<ProjectForm>(defaultProjectForm());
   const [modules, setModules] = useState<ProjectModuleForm[]>([]);
+  const [projectFile, setProjectFile] = useState<File | null>(null);
+  const [removeProjectFile, setRemoveProjectFile] = useState(false);
+  const projectFileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFocus = useCallback((id: string) => {
     setFocusedId(id);
@@ -235,13 +240,29 @@ export function ProjectsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const payload: {
+        name: string;
+        clientId?: string;
+        status: string;
+        progress: number;
+        budget: number;
+        fileUrl?: string;
+        fileName?: string;
+      } = {
         name: form.name,
         ...(editing ? {} : { clientId: form.clientId }),
         status: form.status,
         progress: projectProgressFromModules(modules),
         budget: Number(form.budget || 0),
       };
+      if (projectFile) {
+        const upload = await apiUploadAttachment(projectFile);
+        payload.fileUrl = upload.url;
+        payload.fileName = projectFile.name;
+      } else if (removeProjectFile) {
+        payload.fileUrl = "";
+        payload.fileName = "";
+      }
       const saved = editing
         ? await apiPatch<ApiProject>(`/projects/${editing.id}`, payload)
         : await apiPost<ApiProject>("/projects", payload);
@@ -273,6 +294,8 @@ export function ProjectsPage() {
       setOpen(false);
       setEditing(null);
       setModules([]);
+      setProjectFile(null);
+      setRemoveProjectFile(false);
       setForm(defaultProjectForm());
     },
     meta: { successMessage: "Projeto salvo com sucesso." },
@@ -288,6 +311,8 @@ export function ProjectsPage() {
       setOpen(false);
       setEditing(null);
       setModules([]);
+      setProjectFile(null);
+      setRemoveProjectFile(false);
       setForm(defaultProjectForm());
     },
     meta: { successMessage: "Projeto removido." },
@@ -322,6 +347,9 @@ export function ProjectsPage() {
     setEditing(null);
     setForm(defaultProjectForm(clients[0]?.id));
     setModules([]);
+    setProjectFile(null);
+    setRemoveProjectFile(false);
+    if (projectFileInputRef.current) projectFileInputRef.current.value = "";
     setOpen(true);
   };
 
@@ -337,6 +365,9 @@ export function ProjectsPage() {
     setModules(
       normalizeModuleOrder((project.modules ?? []).map(moduleFormFromApi)),
     );
+    setProjectFile(null);
+    setRemoveProjectFile(false);
+    if (projectFileInputRef.current) projectFileInputRef.current.value = "";
     setOpen(true);
   };
 
@@ -811,6 +842,70 @@ export function ProjectsPage() {
                 </div>
               </div>
 
+              <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4">
+                <p className="mono-label text-[color:var(--muted)]">
+                  Arquivo do projeto
+                </p>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  Anexe um unico arquivo .zip com os arquivos do projeto.
+                </p>
+                <input
+                  ref={projectFileInputRef}
+                  accept=".zip,application/zip,application/x-zip-compressed"
+                  className="hidden"
+                  type="file"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    if (!isZipFile(file)) {
+                      event.currentTarget.value = "";
+                      setProjectFile(null);
+                      window.alert("Envie apenas um arquivo ZIP.");
+                      return;
+                    }
+                    setProjectFile(file);
+                    setRemoveProjectFile(false);
+                  }}
+                />
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => projectFileInputRef.current?.click()}
+                  >
+                    <Paperclip size={17} />
+                    {projectFile || (editing?.fileUrl && !removeProjectFile)
+                      ? "Trocar ZIP"
+                      : "Anexar projeto"}
+                  </Button>
+                  {projectFile || (editing?.fileUrl && !removeProjectFile) ? (
+                    <>
+                      <span className="min-w-0 truncate text-sm font-semibold">
+                        {projectFile?.name ?? editing?.fileName ?? "projeto.zip"}
+                      </span>
+                      <Button
+                        aria-label="Remover anexo"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setProjectFile(null);
+                          setRemoveProjectFile(true);
+                          if (projectFileInputRef.current) {
+                            projectFileInputRef.current.value = "";
+                          }
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-sm text-[color:var(--muted)]">
+                      Nenhum ZIP anexado
+                    </span>
+                  )}
+                </div>
+              </div>
+
               <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
                 {editing ? (
                   <Button
@@ -844,6 +939,19 @@ function defaultProjectForm(clientId = ""): ProjectForm {
     progress: "0",
     budget: "0",
   };
+}
+
+function isZipFile(file: File) {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith(".zip")) return false;
+  const type = file.type.toLowerCase();
+  return (
+    !type ||
+    type === "application/zip" ||
+    type === "application/x-zip" ||
+    type === "application/x-zip-compressed" ||
+    type === "application/octet-stream"
+  );
 }
 
 function moduleFormFromApi(
@@ -970,6 +1078,7 @@ export function ContractsPage() {
     queryFn: () => apiGet<ApiUser[]>("/users"),
   });
   const [open, setOpen] = useState(false);
+  const [createKind, setCreateKind] = useState<"picker" | "draft" | "signed">("picker");
   const [editing, setEditing] = useState<ApiContract | null>(null);
   const [form, setForm] = useState(defaultContractForm());
   const [expandedContracts, setExpandedContracts] = useState<Record<string, boolean>>({});
@@ -991,6 +1100,14 @@ export function ContractsPage() {
         value: Number(form.value || 0),
         contractingPartyId: form.contractingPartyId,
       };
+      if (!editing && createKind === "signed") {
+        if (!form.file) throw new Error("Anexe o PDF do contrato assinado.");
+        const upload = await apiUploadContractPdf(form.file);
+        return apiPost<ApiContract>("/contracts/signed", {
+          ...payload,
+          fileUrl: upload.url,
+        });
+      }
       const saved = editing
         ? await apiPatch<ApiContract>(`/contracts/${editing.id}`, payload)
         : await apiPost<ApiContract>("/contracts", payload);
@@ -1008,6 +1125,7 @@ export function ContractsPage() {
       queryClient.invalidateQueries({ queryKey: ["contracts"] });
       setOpen(false);
       setEditing(null);
+      setCreateKind("picker");
       setForm(defaultContractForm());
     },
     meta: { successMessage: "Contrato salvo com sucesso." },
@@ -1023,6 +1141,12 @@ export function ContractsPage() {
     mutationFn: (id: string) => apiPost<ApiContract>(`/contracts/${id}/cancel`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
     meta: { successMessage: "Contrato cancelado e arquivos removidos." },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiDelete(`/contracts/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+    meta: { successMessage: "Contrato excluido." },
   });
 
   const signMutation = useMutation({
@@ -1041,6 +1165,7 @@ export function ContractsPage() {
 
   const startEdit = (contract: ApiContract) => {
     setEditing(contract);
+    setCreateKind("draft");
     setForm({
       title: contract.title,
       value: String(contract.value ?? 0),
@@ -1060,6 +1185,7 @@ export function ContractsPage() {
           onCreate={() => {
             setEditing(null);
             setForm(defaultContractForm());
+            setCreateKind("picker");
             setOpen(true);
           }}
         />
@@ -1227,6 +1353,24 @@ export function ContractsPage() {
                             Editar
                           </Button>
                         ) : null}
+                        {contract.status === "CANCELLED" ? (
+                          <Button
+                            aria-label="Excluir contrato cancelado"
+                            disabled={deleteMutation.isPending}
+                            variant="ghost"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Deseja excluir este contrato cancelado?",
+                                )
+                              ) {
+                                deleteMutation.mutate(contract.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1258,16 +1402,70 @@ export function ContractsPage() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <p className="mono-label text-[color:var(--muted)]">
-                  {editing ? "Editar" : "Novo"}
+                  {editing ? "Editar" : createKind === "picker" ? "Novo" : createKind === "signed" ? "Registro" : "Novo"}
                 </p>
                 <h2 className="font-display text-2xl font-semibold">
-                  Contrato
+                  {editing
+                    ? "Contrato"
+                    : createKind === "signed"
+                      ? "Contrato assinado"
+                      : createKind === "draft"
+                        ? "Novo contrato"
+                        : "Contrato"}
                 </h2>
               </div>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
-                <X size={18} />
-              </Button>
+              <div className="flex items-center gap-1">
+                {!editing && createKind !== "picker" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setCreateKind("picker")}
+                  >
+                    <ChevronLeft size={18} />
+                    Voltar
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setOpen(false);
+                    setCreateKind("picker");
+                  }}
+                >
+                  <X size={18} />
+                </Button>
+              </div>
             </div>
+            {!editing && createKind === "picker" ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                <button
+                  className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-5 text-left transition hover:border-[color:var(--accent)]"
+                  type="button"
+                  onClick={() => setCreateKind("draft")}
+                >
+                  <FileSignature size={22} />
+                  <h3 className="mt-4 font-display text-xl font-semibold">
+                    Novo contrato
+                  </h3>
+                  <p className="mt-2 text-sm text-[color:var(--muted)]">
+                    Fluxo atual com participantes e assinatura digital.
+                  </p>
+                </button>
+                <button
+                  className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-5 text-left transition hover:border-[color:var(--accent)]"
+                  type="button"
+                  onClick={() => setCreateKind("signed")}
+                >
+                  <FileCheck size={22} />
+                  <h3 className="mt-4 font-display text-xl font-semibold">
+                    Contrato assinado
+                  </h3>
+                  <p className="mt-2 text-sm text-[color:var(--muted)]">
+                    Informe titulo, valor, contratante e anexe o PDF. Ninguem precisa assinar.
+                  </p>
+                </button>
+              </div>
+            ) : (
             <form
               className="grid gap-4 md:grid-cols-2"
               onSubmit={(event) => {
@@ -1289,8 +1487,14 @@ export function ContractsPage() {
                   Status
                 </span>
                 <div className="mt-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3">
-                  <StatusBadge tone={statusTone(editing?.status ?? "DRAFT")}>
-                    {translateContract(editing?.status ?? "DRAFT")}
+                  <StatusBadge
+                    tone={statusTone(
+                      editing?.status ?? (createKind === "signed" ? "SIGNED" : "DRAFT"),
+                    )}
+                  >
+                    {translateContract(
+                      editing?.status ?? (createKind === "signed" ? "SIGNED" : "DRAFT"),
+                    )}
                   </StatusBadge>
                 </div>
               </div>
@@ -1312,9 +1516,15 @@ export function ContractsPage() {
                   setForm((current) => ({ ...current, contractingPartyId: value }))
                 }
               />
-              <p className="md:col-span-2 text-sm text-[color:var(--muted)]">
-                Contratado e testemunhas podem ser adicionados depois, no painel do contrato.
-              </p>
+              {createKind === "signed" ? (
+                <p className="md:col-span-2 text-sm text-[color:var(--muted)]">
+                  O PDF anexado ja vale como contrato assinado. Contratante e contratado poderao visualizar e baixar.
+                </p>
+              ) : (
+                <p className="md:col-span-2 text-sm text-[color:var(--muted)]">
+                  Contratado e testemunhas podem ser adicionados depois, no painel do contrato.
+                </p>
+              )}
               <label className="block md:col-span-2">
                 <span className="mono-label text-[color:var(--muted)]">
                   Anexo PDF
@@ -1325,6 +1535,7 @@ export function ContractsPage() {
                     className="min-w-0 flex-1 text-sm"
                     accept="application/pdf,.pdf"
                     disabled={Boolean(editing && editing.status !== "DRAFT")}
+                    required={createKind === "signed" && !editing}
                     type="file"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
@@ -1353,14 +1564,16 @@ export function ContractsPage() {
                 className="md:col-span-2"
                 disabled={
                   saveMutation.isPending ||
-                  Boolean(editing && editing.status !== "DRAFT")
+                  Boolean(editing && editing.status !== "DRAFT") ||
+                  (createKind === "signed" && !form.file)
                 }
                 type="submit"
               >
                 <Save size={17} />
-                Salvar contrato
+                {createKind === "signed" ? "Registrar contrato" : "Salvar contrato"}
               </Button>
             </form>
+            )}
           </Panel>
         </div>
       </ModalOverlay>
@@ -1587,10 +1800,25 @@ export function ServicesPage() {
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<ApiService | null>(null);
   const [form, setForm] = useState<ServiceForm>(defaultServiceForm());
+  const [serviceFile, setServiceFile] = useState<File | null>(null);
+  const [removeServiceFile, setRemoveServiceFile] = useState(false);
+  const serviceFileInputRef = useRef<HTMLInputElement>(null);
 
   const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
+    mutationFn: async () => {
+      const payload: {
+        name: string;
+        description?: string;
+        healthChecks: ApiServiceHealthCheck[];
+        notes?: string;
+        clientId?: string;
+        monthlyValue: number;
+        paymentDay: number;
+        startDate: string;
+        active: boolean;
+        fileUrl?: string;
+        fileName?: string;
+      } = {
         name: form.name,
         description: form.description || undefined,
         healthChecks: cleanHealthChecks(form.healthChecks),
@@ -1601,6 +1829,14 @@ export function ServicesPage() {
         startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
         active: form.active,
       };
+      if (serviceFile) {
+        const upload = await apiUploadAttachment(serviceFile);
+        payload.fileUrl = upload.url;
+        payload.fileName = serviceFile.name;
+      } else if (removeServiceFile) {
+        payload.fileUrl = "";
+        payload.fileName = "";
+      }
       return editing
         ? apiPatch<ApiService>(`/services/${editing.id}`, payload)
         : apiPost<ApiService>("/services", payload);
@@ -1611,6 +1847,8 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setOpen(false);
       setEditing(null);
+      setServiceFile(null);
+      setRemoveServiceFile(false);
       setForm(defaultServiceForm(clients[0]?.id));
     },
     meta: { successMessage: "Servico salvo e cobrancas sincronizadas." },
@@ -1624,6 +1862,8 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       setOpen(false);
       setEditing(null);
+      setServiceFile(null);
+      setRemoveServiceFile(false);
       setForm(defaultServiceForm(clients[0]?.id));
     },
     meta: { successMessage: "Servico removido." },
@@ -1636,6 +1876,9 @@ export function ServicesPage() {
   const startCreate = () => {
     setEditing(null);
     setForm(defaultServiceForm(clients[0]?.id));
+    setServiceFile(null);
+    setRemoveServiceFile(false);
+    if (serviceFileInputRef.current) serviceFileInputRef.current.value = "";
     setOpen(true);
   };
 
@@ -1652,6 +1895,9 @@ export function ServicesPage() {
       startDate: toDateInput(new Date(service.startDate)),
       active: service.active,
     });
+    setServiceFile(null);
+    setRemoveServiceFile(false);
+    if (serviceFileInputRef.current) serviceFileInputRef.current.value = "";
     setOpen(true);
   };
 
@@ -1892,9 +2138,14 @@ export function ServicesPage() {
               />
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="mono-label text-[color:var(--muted)]">
-                    Pontos de saude
-                  </span>
+                  <div>
+                    <span className="mono-label text-[color:var(--muted)]">
+                      Pontos de saude
+                    </span>
+                    <p className="mt-1 text-xs text-[color:var(--muted)]">
+                      Reconhece frontend, /api/health (status ok ou 503) e /api/health/detailed.
+                    </p>
+                  </div>
                   <Button
                     type="button"
                     variant="secondary"
@@ -1920,6 +2171,7 @@ export function ServicesPage() {
                     >
                       <TextInput
                         label="Nome"
+                        placeholder="Frontend, API + Banco, Backend"
                         value={item.name}
                         onChange={(value) =>
                           setForm((current) => ({
@@ -1934,6 +2186,7 @@ export function ServicesPage() {
                       />
                       <TextInput
                         label="IP, porta ou URL"
+                        placeholder="https://site.com ou /api/health"
                         value={item.address}
                         onChange={(value) =>
                           setForm((current) => ({
@@ -2016,6 +2269,69 @@ export function ServicesPage() {
                   setForm((current) => ({ ...current, notes: value }))
                 }
               />
+              <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 md:col-span-2">
+                <p className="mono-label text-[color:var(--muted)]">
+                  Arquivo do servico
+                </p>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  Anexe um unico arquivo .zip com os arquivos do servico.
+                </p>
+                <input
+                  ref={serviceFileInputRef}
+                  accept=".zip,application/zip,application/x-zip-compressed"
+                  className="hidden"
+                  type="file"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    if (!isZipFile(file)) {
+                      event.currentTarget.value = "";
+                      setServiceFile(null);
+                      window.alert("Envie apenas um arquivo ZIP.");
+                      return;
+                    }
+                    setServiceFile(file);
+                    setRemoveServiceFile(false);
+                  }}
+                />
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => serviceFileInputRef.current?.click()}
+                  >
+                    <Paperclip size={17} />
+                    {serviceFile || (editing?.fileUrl && !removeServiceFile)
+                      ? "Trocar ZIP"
+                      : "Anexar servico"}
+                  </Button>
+                  {serviceFile || (editing?.fileUrl && !removeServiceFile) ? (
+                    <>
+                      <span className="min-w-0 truncate text-sm font-semibold">
+                        {serviceFile?.name ?? editing?.fileName ?? "servico.zip"}
+                      </span>
+                      <Button
+                        aria-label="Remover anexo"
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setServiceFile(null);
+                          setRemoveServiceFile(true);
+                          if (serviceFileInputRef.current) {
+                            serviceFileInputRef.current.value = "";
+                          }
+                        }}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="text-sm text-[color:var(--muted)]">
+                      Nenhum ZIP anexado
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="flex items-end justify-end gap-2 md:col-span-2">
                 {editing ? (
                   <Button
@@ -2088,9 +2404,14 @@ function cleanHealthChecks(
     .map((item) => ({
       id: item.id || crypto.randomUUID(),
       name: item.name.trim(),
-      address: item.address.trim(),
+      address: extractHealthUrl(item.address.trim()) || item.address.trim(),
     }))
     .filter((item) => item.name && item.address);
+}
+
+function extractHealthUrl(value: string) {
+  const match = value.match(/https?:\/\/[^\s]+/i);
+  return match ? match[0].replace(/[.,;)]+$/g, "") : "";
 }
 
 function updateHealthCheck(
@@ -4146,6 +4467,7 @@ function TextInput({
   type = "text",
   required,
   disabled,
+  placeholder,
 }: {
   label: string;
   value: string;
@@ -4153,6 +4475,7 @@ function TextInput({
   type?: string;
   required?: boolean;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -4164,6 +4487,7 @@ function TextInput({
         maxLength={maxLengthFor(label)}
         minLength={type === "password" ? 6 : undefined}
         pattern={type === "password" ? ".*[^A-Za-z0-9].*" : undefined}
+        placeholder={placeholder}
         title={type === "password" ? passwordRuleMessage : undefined}
         required={required}
         type={type}

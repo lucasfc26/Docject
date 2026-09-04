@@ -21,6 +21,14 @@ export class CreateProjectDto {
   @Min(0)
   @Max(100)
   progress?: number;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
 }
 
 export class UpdateProjectDto {
@@ -42,6 +50,14 @@ export class UpdateProjectDto {
   @Min(0)
   @Max(100)
   progress?: number;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
 }
 
 export class CreateProjectModuleDto {

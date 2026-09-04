@@ -17,6 +17,26 @@ export class CreateContractDto {
   contractingPartyId!: string;
 }
 
+export class CreateSignedContractDto {
+  @IsString()
+  title!: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  value?: number;
+
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+
+  @IsString()
+  contractingPartyId!: string;
+
+  @IsString()
+  fileUrl!: string;
+}
+
 export class UpdateContractDto {
   @IsOptional()
   @IsString()

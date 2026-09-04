@@ -192,6 +192,22 @@ export async function apiUploadContractPdf(file: File): Promise<ApiFileUpload> {
   return response.json() as Promise<ApiFileUpload>;
 }
 
+export async function apiUploadAttachment(file: File): Promise<ApiFileUpload> {
+  assertConsent();
+  await ensureToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${API_URL}/uploads/attachments`, {
+    method: "POST",
+    headers: memoryToken
+      ? { Authorization: `Bearer ${memoryToken}` }
+      : undefined,
+    body: formData,
+  });
+  await assertOk(response, "Erro ao enviar arquivo ZIP do projeto");
+  return response.json() as Promise<ApiFileUpload>;
+}
+
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   assertConsent();
   await ensureToken();
@@ -301,6 +317,8 @@ export type ApiProject = {
   budget: string;
   status: string;
   progress: number;
+  fileUrl?: string | null;
+  fileName?: string | null;
   clientId?: string;
   client?: { id?: string; name: string };
   modules?: Array<{
@@ -336,6 +354,8 @@ export type ApiService = {
   paymentDay: number;
   startDate: string;
   active: boolean;
+  fileUrl?: string | null;
+  fileName?: string | null;
   clientId: string;
   client?: { id?: string; name: string };
   transactions?: ApiTransaction[];
@@ -347,8 +367,17 @@ export type ApiServiceHealthCheck = {
   address: string;
 };
 
+export type ApiHealthComponent = {
+  name: string;
+  online: boolean;
+  detail?: string;
+};
+
 export type ApiServiceHealthCheckResult = ApiServiceHealthCheck & {
-  status: "FAST" | "SLOW" | "OFFLINE";
+  status: "FAST" | "SLOW" | "OFFLINE" | "PENDING";
+  online?: boolean;
+  summary?: string;
+  components?: ApiHealthComponent[];
   responseTimeMs: number | null;
   checkedAt: string;
 };

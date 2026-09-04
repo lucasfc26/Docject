@@ -8,11 +8,11 @@ export class ServiceHealthCheckDto {
   id?: string;
 
   @IsString()
-  @MaxLength(80)
+  @MaxLength(120)
   name!: string;
 
   @IsString()
-  @MaxLength(240)
+  @MaxLength(500)
   address!: string;
 }
 
@@ -65,6 +65,14 @@ export class CreateServiceDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
 }
 
 export class UpdateServiceDto {
@@ -117,4 +125,12 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
 }

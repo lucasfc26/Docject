@@ -9,6 +9,7 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { CreateFileUploadDto } from "./dto/upload.dto";
 
 const contractUploadDir = join(process.cwd(), "uploads", "contracts");
+const attachmentUploadDir = join(process.cwd(), "uploads", "attachments");
 
 @ApiTags("uploads")
 @Controller("uploads")
@@ -66,6 +67,46 @@ export class UploadsController {
     });
   }
 
+  @Post("attachments")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: (_request, _file, callback) => {
+          mkdirSync(attachmentUploadDir, { recursive: true });
+          callback(null, attachmentUploadDir);
+        },
+        filename: (_request, file: { originalname: string }, callback) => {
+          callback(null, `${randomUUID()}.zip`);
+        }
+      }),
+      fileFilter: (_request, file, callback) => {
+        if (!isZipAttachment(file.originalname, file.mimetype)) {
+          callback(new BadRequestException("Envie apenas um arquivo ZIP."), false);
+          return;
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: 50 * 1024 * 1024 }
+    })
+  )
+  async uploadAttachment(
+    @Req() request: { headers: Record<string, string | string[] | undefined>; protocol: string },
+    @UploadedFile() file?: { filename: string; originalname: string; mimetype: string }
+  ) {
+    if (!file) {
+      throw new BadRequestException("Arquivo ZIP obrigatorio.");
+    }
+
+    const url = `${requestOrigin(request)}/uploads/attachments/${file.filename}`;
+    return this.prisma.fileUpload.create({
+      data: {
+        filename: file.originalname,
+        url,
+        mimeType: file.mimetype
+      }
+    });
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.prisma.fileUpload.delete({ where: { id } });
@@ -82,4 +123,16 @@ function requestOrigin(request: { headers: Record<string, string | string[] | un
 
 function firstHeader(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function isZipAttachment(originalname: string, mimetype: string) {
+  if (extname(originalname).toLowerCase() !== ".zip") return false;
+  const type = (mimetype || "").toLowerCase();
+  return (
+    !type ||
+    type === "application/zip" ||
+    type === "application/x-zip" ||
+    type === "application/x-zip-compressed" ||
+    type === "application/octet-stream"
+  );
 }

@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import { AuthenticatedRequest, projectScope } from "../../common/current-user";
+import { deleteUploadedAttachment, emptyToNull } from "../../common/uploaded-file";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateCommentDto, CreateMilestoneDto, CreateProjectDto, CreateProjectModuleDto, UpdateMilestoneDto, UpdateProjectDto, UpdateProjectModuleDto } from "./dto/project.dto";
 
@@ -28,17 +29,39 @@ export class ProjectsController {
 
   @Post()
   create(@Body() body: CreateProjectDto) {
-    return this.prisma.project.create({ data: body as never, include: { client: true } });
+    return this.prisma.project.create({
+      data: {
+        ...body,
+        fileUrl: emptyToNull(body.fileUrl),
+        fileName: emptyToNull(body.fileName)
+      } as never,
+      include: { client: true }
+    });
   }
 
   @Patch(":id")
-  update(@Param("id") id: string, @Body() body: UpdateProjectDto) {
-    return this.prisma.project.update({ where: { id }, data: body as never });
+  async update(@Param("id") id: string, @Body() body: UpdateProjectDto) {
+    const previous = await this.prisma.project.findUnique({ where: { id } });
+    const nextFileUrl = body.fileUrl !== undefined ? emptyToNull(body.fileUrl) : undefined;
+    if (previous?.fileUrl && nextFileUrl !== undefined && nextFileUrl !== previous.fileUrl) {
+      await deleteUploadedAttachment(previous.fileUrl);
+    }
+    return this.prisma.project.update({
+      where: { id },
+      data: {
+        ...body,
+        ...(body.fileUrl !== undefined ? { fileUrl: nextFileUrl } : {}),
+        ...(body.fileName !== undefined ? { fileName: emptyToNull(body.fileName) } : {})
+      } as never
+    });
   }
 
   @Delete(":id")
-  remove(@Param("id") id: string) {
-    return this.prisma.project.delete({ where: { id } });
+  async remove(@Param("id") id: string) {
+    const previous = await this.prisma.project.findUnique({ where: { id } });
+    const deleted = await this.prisma.project.delete({ where: { id } });
+    await deleteUploadedAttachment(previous?.fileUrl);
+    return deleted;
   }
 
   @Post(":id/modules")

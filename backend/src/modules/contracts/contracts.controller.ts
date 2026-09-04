@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Req } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import * as bcrypt from "bcrypt";
 import { ContractParticipantRole, Prisma } from "@prisma/client";
@@ -23,6 +23,7 @@ import {
 import {
   AddContractParticipantDto,
   CreateContractDto,
+  CreateSignedContractDto,
   CreateContractVersionDto,
   SignContractDto,
   UpdateContractDto,
@@ -103,6 +104,83 @@ export class ContractsController {
     return contract;
   }
 
+  @Post("signed")
+  async createSigned(@Req() request: AuthenticatedRequest, @Body() body: CreateSignedContractDto) {
+    const actorId = request.user?.sub;
+    const actor = actorId ? await this.prisma.user.findUnique({ where: { id: actorId }, select: actorSelect }) : null;
+    const contractingParty = await this.prisma.user.findUnique({
+      where: { id: body.contractingPartyId },
+      select: { ...userSelect, clientId: true },
+    });
+    if (!contractingParty) throw new BadRequestException("Contratante invalido.");
+    if (!body.fileUrl.trim()) throw new BadRequestException("Anexe o PDF do contrato assinado.");
+
+    const signedAt = new Date();
+    const documentHash = await uploadedContractHash([{ version: 1, fileUrl: body.fileUrl }]);
+    const participants: Array<{
+      userId: string;
+      role: "CONTRACTING_PARTY" | "CONTRACTOR";
+      signedAt: Date;
+      addedById?: string;
+    }> = [
+      {
+        userId: body.contractingPartyId,
+        role: "CONTRACTING_PARTY",
+        signedAt,
+        addedById: actorId,
+      },
+    ];
+    if (actorId && actorId !== body.contractingPartyId) {
+      participants.push({
+        userId: actorId,
+        role: "CONTRACTOR",
+        signedAt,
+        addedById: actorId,
+      });
+    }
+
+    return this.prisma.contract.create({
+      data: {
+        title: body.title,
+        value: body.value ?? 0,
+        status: "SIGNED",
+        clientId: body.clientId || contractingParty.clientId,
+        createdById: actorId,
+        signedFileUrl: body.fileUrl,
+        originalDocumentHash: documentHash,
+        signedDocumentHash: documentHash,
+        sentAt: signedAt,
+        participants: { create: participants },
+        versions: { create: [{ version: 1, fileUrl: body.fileUrl }] },
+        eventLogs: {
+          create: [
+            {
+              eventType: "CREATED",
+              actorUserId: actorId,
+              actorName: actor?.name,
+              actorEmail: actor?.email,
+              description: buildCreatedDescription(actor, contractTitle(body.title)),
+              metadata: {
+                contractingPartyId: body.contractingPartyId,
+                contractingPartyName: contractingParty.name,
+                contractingPartyEmail: contractingParty.email,
+                importedSigned: true,
+              },
+            },
+            {
+              eventType: "FINALIZED",
+              actorUserId: actorId,
+              actorName: actor?.name,
+              actorEmail: actor?.email,
+              description: `${actor?.name ?? "Alguem"} registrou o documento "${contractTitle(body.title)}" como ja assinado.`,
+            },
+          ],
+        },
+      },
+      include: contractInclude,
+    });
+  }
+
   @Patch(":id")
   async update(@Param("id") id: string, @Body() body: UpdateContractDto) {
     const contract = await this.prisma.contract.findUnique({ where: { id } });
@@ -117,7 +195,21 @@ export class ContractsController {
   }
 
   @Delete(":id")
-  remove(@Param("id") id: string) {
+  async remove(@Param("id") id: string) {
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: { versions: true },
+    });
+    if (!contract) throw new NotFoundException("Contrato nao encontrado.");
+    if (contract.status !== "CANCELLED") {
+      throw new BadRequestException("Apenas contratos cancelados podem ser excluidos.");
+    }
+
+    await deleteUploadedContractFile(contract.signedFileUrl);
+    for (const version of contract.versions) {
+      await deleteUploadedContractFile(version.fileUrl);
+    }
+    await this.prisma.contractVersion.deleteMany({ where: { contractId: id } });
     return this.prisma.contract.delete({ where: { id } });
   }
 
