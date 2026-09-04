@@ -291,11 +291,14 @@ function ServiceClientView({
     );
   }
 
-  const healthItems = healthResults.length
+  const healthItems: ApiServiceHealthCheckResult[] = healthResults.length
     ? healthResults
     : (service.healthChecks ?? []).map((item) => ({
         ...item,
-        status: "PENDING" as const,
+        status: "PENDING",
+        online: undefined,
+        summary: undefined,
+        components: [],
         responseTimeMs: null,
         checkedAt: "",
       }));
