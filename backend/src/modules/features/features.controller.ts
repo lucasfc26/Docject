@@ -24,7 +24,7 @@ export class FeaturesController {
 const featurePathsByRole: Record<string, string[]> = {
   ADMIN: ["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/agenda", "/resources", "/settings"],
   MANAGER: ["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/agenda", "/resources", "/settings"],
-  FINANCIAL: ["/dashboard", "/financial", "/settings"],
+  FINANCIAL: ["/dashboard", "/services", "/financial", "/settings"],
   CLIENT: ["/client/dashboard", "/settings"]
 };
 

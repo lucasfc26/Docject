@@ -27,6 +27,7 @@ import {
 import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
+import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
 import { scrollToFocusRow, useFocusFromUrl } from "../hooks/useFocusFromUrl";
 import {
   apiDelete,
@@ -48,6 +49,7 @@ import {
   type ApiResource,
   type ApiService,
   type ApiServiceHealthCheck,
+  type ApiServiceHours,
   type ApiSettings,
   type ApiTransaction,
   type ApiUser,
@@ -102,6 +104,9 @@ type ServiceForm = {
   notes: string;
   clientId: string;
   monthlyValue: string;
+  monthlyHours: string;
+  hoursExpirePercent: string;
+  hoursExpirationMonths: string;
   paymentDay: string;
   startDate: string;
   active: boolean;
@@ -1803,6 +1808,49 @@ export function ServicesPage() {
   const [serviceFile, setServiceFile] = useState<File | null>(null);
   const [removeServiceFile, setRemoveServiceFile] = useState(false);
   const serviceFileInputRef = useRef<HTMLInputElement>(null);
+  const canManageServices = useMemo(() => {
+    const role = readStoredUserRole();
+    return role === "ADMIN" || role === "MANAGER";
+  }, []);
+  const [expandedServices, setExpandedServices] = useState<Set<string>>(new Set());
+  const [serviceTabs, setServiceTabs] = useState<Record<string, "hours" | "report">>({});
+  const [workLogService, setWorkLogService] = useState<ApiService | null>(null);
+  const [workLogForm, setWorkLogForm] = useState<WorkLogForm>(defaultWorkLogForm());
+
+  const workLogMutation = useMutation({
+    mutationFn: () =>
+      apiPost(`/services/${workLogService?.id}/work-logs`, {
+        month: workLogForm.month,
+        hours: Number(workLogForm.hours),
+        description: workLogForm.description.trim(),
+      }),
+    onSuccess: () => {
+      if (workLogService) {
+        queryClient.invalidateQueries({
+          queryKey: ["service-hours", workLogService.id],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["service-report", workLogService.id],
+        });
+        setExpandedServices((current) => new Set(current).add(workLogService.id));
+      }
+      setWorkLogService(null);
+    },
+    meta: { successMessage: "Horas registradas." },
+  });
+
+  const toggleServiceExpanded = (id: string) =>
+    setExpandedServices((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const startWorkLog = (service: ApiService, month = currentMonthKey()) => {
+    setWorkLogService(service);
+    setWorkLogForm(defaultWorkLogForm(month));
+  };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1813,6 +1861,9 @@ export function ServicesPage() {
         notes?: string;
         clientId?: string;
         monthlyValue: number;
+        monthlyHours: number;
+        hoursExpirePercent: number;
+        hoursExpirationMonths: number;
         paymentDay: number;
         startDate: string;
         active: boolean;
@@ -1825,6 +1876,9 @@ export function ServicesPage() {
         notes: form.notes || undefined,
         ...(editing ? {} : { clientId: form.clientId }),
         monthlyValue: Number(form.monthlyValue || 0),
+        monthlyHours: Math.max(0, Number(form.monthlyHours || 0)),
+        hoursExpirePercent: Number(form.hoursExpirePercent || 0),
+        hoursExpirationMonths: Number(form.hoursExpirationMonths || 0),
         paymentDay: Number(form.paymentDay || 1),
         startDate: new Date(`${form.startDate}T00:00:00`).toISOString(),
         active: form.active,
@@ -1845,6 +1899,7 @@ export function ServicesPage() {
       queryClient.invalidateQueries({ queryKey: ["services"] });
       queryClient.invalidateQueries({ queryKey: ["financial"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["service-hours"] });
       setOpen(false);
       setEditing(null);
       setServiceFile(null);
@@ -1891,6 +1946,9 @@ export function ServicesPage() {
       notes: service.notes ?? "",
       clientId: service.clientId,
       monthlyValue: String(service.monthlyValue ?? 0),
+      monthlyHours: String(Number(service.monthlyHours ?? 0)),
+      hoursExpirePercent: String(service.hoursExpirePercent ?? 0),
+      hoursExpirationMonths: String(service.hoursExpirationMonths ?? 0),
       paymentDay: String(service.paymentDay ?? 1),
       startDate: toDateInput(new Date(service.startDate)),
       active: service.active,
@@ -1907,7 +1965,7 @@ export function ServicesPage() {
         <Toolbar
           title="Servicos"
           subtitle="Servicos mensais por cliente com cobrancas recorrentes no financeiro."
-          onCreate={startCreate}
+          onCreate={canManageServices ? startCreate : undefined}
           onFilter={() => setFilterOpen((current) => !current)}
           createLabel="Servico"
         />
@@ -1972,15 +2030,27 @@ export function ServicesPage() {
               </tr>
             ) : null}
             {filteredServices.map((service) => (
-              <tr
-                className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]"
-                key={service.id}
-              >
+              <Fragment key={service.id}>
+              <tr className="border-b border-[color:var(--line)] transition hover:bg-[color:var(--panel-strong)]">
                 <td className="px-6 py-4">
-                  <p className="text-sm font-semibold">{service.name}</p>
-                  <p className="mt-1 line-clamp-1 text-xs text-[color:var(--muted)]">
-                    {service.description || "Servico mensal"}
-                  </p>
+                  <button
+                    aria-expanded={expandedServices.has(service.id)}
+                    className="flex items-start gap-2 text-left"
+                    type="button"
+                    onClick={() => toggleServiceExpanded(service.id)}
+                  >
+                    {expandedServices.has(service.id) ? (
+                      <ChevronDown size={16} className="mt-0.5 shrink-0 text-[color:var(--muted)]" />
+                    ) : (
+                      <ChevronRight size={16} className="mt-0.5 shrink-0 text-[color:var(--muted)]" />
+                    )}
+                    <span>
+                      <span className="block text-sm font-semibold">{service.name}</span>
+                      <span className="mt-1 line-clamp-1 text-xs text-[color:var(--muted)]">
+                        {service.description || "Servico mensal"}
+                      </span>
+                    </span>
+                  </button>
                 </td>
                 <td className="px-6 py-4 text-sm">
                   {service.client?.name ?? "Sem cliente"}
@@ -2020,7 +2090,16 @@ export function ServicesPage() {
                   </StatusBadge>
                 </td>
                 <td className="px-6 py-4">
+                  {canManageServices ? (
                   <div className="flex justify-end gap-2">
+                    <Button
+                      aria-label="Registrar horas"
+                      title="Registrar horas"
+                      variant="secondary"
+                      onClick={() => startWorkLog(service)}
+                    >
+                      <Plus size={16} />
+                    </Button>
                     <Button
                       variant="secondary"
                       onClick={() => startEdit(service)}
@@ -2036,8 +2115,40 @@ export function ServicesPage() {
                       <Trash2 size={16} />
                     </Button>
                   </div>
+                  ) : null}
                 </td>
               </tr>
+              {expandedServices.has(service.id) ? (
+                <tr className="border-b border-[color:var(--line)] bg-[color:var(--panel-strong)]">
+                  <td className="px-6 py-4" colSpan={8}>
+                    <div className="mb-4 flex gap-2">
+                      {(["hours", "report"] as const).map((tab) => (
+                        <Button
+                          key={tab}
+                          type="button"
+                          variant={(serviceTabs[service.id] ?? "hours") === tab ? "primary" : "secondary"}
+                          onClick={() =>
+                            setServiceTabs((current) => ({ ...current, [service.id]: tab }))
+                          }
+                        >
+                          {tab === "hours" ? <Clock size={16} /> : <FileCheck size={16} />}
+                          {tab === "hours" ? "Horas" : "Relatorio mensal"}
+                        </Button>
+                      ))}
+                    </div>
+                    {(serviceTabs[service.id] ?? "hours") === "hours" ? (
+                      <ServiceHoursTree
+                        canEdit={canManageServices}
+                        service={service}
+                        onAddHours={(month) => startWorkLog(service, month)}
+                      />
+                    ) : (
+                      <ServiceMonthlyReport canEdit={canManageServices} serviceId={service.id} />
+                    )}
+                  </td>
+                </tr>
+              ) : null}
+              </Fragment>
             ))}
             {!filteredServices.length && !isLoading ? (
               <tr>
@@ -2052,6 +2163,76 @@ export function ServicesPage() {
           </tbody>
         </table>
       </div>
+
+      <ModalOverlay open={Boolean(workLogService)}>
+        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/35 p-4 backdrop-blur-sm">
+          <Panel className="w-full max-w-lg p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <p className="mono-label text-[color:var(--muted)]">
+                  Registrar horas
+                </p>
+                <h2 className="font-display text-2xl font-semibold">
+                  {workLogService?.name}
+                </h2>
+              </div>
+              <Button variant="ghost" onClick={() => setWorkLogService(null)}>
+                <X size={18} />
+              </Button>
+            </div>
+            <form
+              className="grid gap-4 md:grid-cols-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                workLogMutation.mutate();
+              }}
+            >
+              <TextInput
+                label="Mes"
+                required
+                type="month"
+                value={workLogForm.month}
+                onChange={(value) =>
+                  setWorkLogForm((current) => ({ ...current, month: value }))
+                }
+              />
+              <TextInput
+                label="Horas gastas"
+                min="0.25"
+                required
+                step="0.25"
+                type="number"
+                value={workLogForm.hours}
+                onChange={(value) =>
+                  setWorkLogForm((current) => ({ ...current, hours: value }))
+                }
+              />
+              <div className="md:col-span-2">
+                <TextArea
+                  label="Servico prestado"
+                  value={workLogForm.description}
+                  onChange={(value) =>
+                    setWorkLogForm((current) => ({ ...current, description: value }))
+                  }
+                />
+              </div>
+              <div className="flex justify-end md:col-span-2">
+                <Button
+                  disabled={
+                    workLogMutation.isPending ||
+                    !workLogForm.description.trim() ||
+                    !(Number(workLogForm.hours) > 0)
+                  }
+                  type="submit"
+                >
+                  <Save size={17} />
+                  {workLogMutation.isPending ? "Salvando..." : "Registrar"}
+                </Button>
+              </div>
+            </form>
+          </Panel>
+        </div>
+      </ModalOverlay>
 
       <ModalOverlay open={open}>
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/35 p-4 backdrop-blur-sm">
@@ -2136,6 +2317,49 @@ export function ServicesPage() {
                   setForm((current) => ({ ...current, startDate: value }))
                 }
               />
+              <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 md:col-span-2">
+                <p className="mono-label text-[color:var(--muted)]">
+                  Banco de horas
+                </p>
+                <p className="mt-1 text-xs text-[color:var(--muted)]">
+                  Horas nao gastas passam para o mes seguinte perdendo o percentual informado, ate expirarem.
+                  Ex.: 12h, 50% e 3 meses = 12h, depois 6h + 12h, depois 3h + 6h + 12h.
+                </p>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <TextInput
+                    label="Horas mensais"
+                    min="0"
+                    step="0.25"
+                    type="number"
+                    value={form.monthlyHours}
+                    onChange={(value) =>
+                      setForm((current) => ({ ...current, monthlyHours: value }))
+                    }
+                  />
+                  <TextInput
+                    label="% que expira por mes"
+                    type="number"
+                    value={form.hoursExpirePercent}
+                    onChange={(value) =>
+                      setForm((current) => ({
+                        ...current,
+                        hoursExpirePercent: clampInteger(value, 0, 100),
+                      }))
+                    }
+                  />
+                  <TextInput
+                    label="Expira em (meses, 0 = nunca)"
+                    type="number"
+                    value={form.hoursExpirationMonths}
+                    onChange={(value) =>
+                      setForm((current) => ({
+                        ...current,
+                        hoursExpirationMonths: clampInteger(value, 0, 120),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
               <div className="md:col-span-2">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2357,6 +2581,199 @@ export function ServicesPage() {
   );
 }
 
+type WorkLogForm = {
+  month: string;
+  hours: string;
+  description: string;
+};
+
+function defaultWorkLogForm(month = currentMonthKey()): WorkLogForm {
+  return { month, hours: "", description: "" };
+}
+
+function currentMonthKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(month: string) {
+  const [year, value] = month.split("-").map(Number);
+  const label = new Date(year, value - 1, 1).toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatHours(value: number) {
+  return `${Number(value.toFixed(2)).toLocaleString("pt-BR")}h`;
+}
+
+function ServiceHoursTree({
+  service,
+  onAddHours,
+  canEdit,
+}: {
+  service: ApiService;
+  onAddHours: (month: string) => void;
+  canEdit: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["service-hours", service.id],
+    queryFn: () => apiGet<ApiServiceHours>(`/services/${service.id}/work-logs`),
+  });
+  const [openMonths, setOpenMonths] = useState<Set<string>>(
+    () => new Set([currentMonthKey()]),
+  );
+
+  const deleteLogMutation = useMutation({
+    mutationFn: (logId: string) =>
+      apiDelete(`/services/${service.id}/work-logs/${logId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["service-hours", service.id] });
+      queryClient.invalidateQueries({ queryKey: ["service-report", service.id] });
+    },
+    meta: { successMessage: "Registro de horas removido." },
+  });
+
+  const toggleMonth = (month: string) =>
+    setOpenMonths((current) => {
+      const next = new Set(current);
+      if (next.has(month)) next.delete(month);
+      else next.add(month);
+      return next;
+    });
+
+  if (isLoading) {
+    return <p className="text-sm text-[color:var(--muted)]">Carregando horas...</p>;
+  }
+  if (error || !data) {
+    return (
+      <p className="text-sm text-ember-600 dark:text-ember-400">
+        Erro ao carregar horas do servico.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[color:var(--muted)]">
+        <span className="inline-flex items-center gap-1">
+          <Clock size={13} />
+          {formatHours(data.monthlyHours)} / mes
+        </span>
+        <span>{data.hoursExpirePercent}% expira por mes</span>
+        <span>
+          {data.hoursExpirationMonths
+            ? `Saldo expira em ${data.hoursExpirationMonths} ${data.hoursExpirationMonths === 1 ? "mes" : "meses"}`
+            : "Saldo sem prazo de expiracao"}
+        </span>
+      </div>
+      {data.months.map((month) => {
+        const isOpen = openMonths.has(month.month);
+        return (
+          <div
+            className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel)]"
+            key={month.month}
+          >
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <button
+                aria-expanded={isOpen}
+                className="flex min-w-[180px] flex-1 items-center gap-2 text-left text-sm font-semibold"
+                type="button"
+                onClick={() => toggleMonth(month.month)}
+              >
+                {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                {formatMonthLabel(month.month)}
+                <span className="text-xs font-normal text-[color:var(--muted)]">
+                  ({month.logs.length} {month.logs.length === 1 ? "registro" : "registros"})
+                </span>
+              </button>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span title="Disponivel no mes (saldo acumulado + horas do mes)">
+                  Disponivel{" "}
+                  <strong>
+                    {month.cohorts.length > 1
+                      ? `${month.cohorts.map((cohort) => formatHours(cohort.hours)).join(" + ")} = `
+                      : ""}
+                    {formatHours(month.availableHours)}
+                  </strong>
+                </span>
+                <span className="text-[color:var(--muted)]">·</span>
+                <span>
+                  Usado <strong>{formatHours(month.usedHours)}</strong>
+                </span>
+                <StatusBadge tone={month.overageHours > 0 ? "danger" : "success"}>
+                  {month.overageHours > 0
+                    ? `Excedeu ${formatHours(month.overageHours)}`
+                    : `Saldo ${formatHours(month.remainingHours)}`}
+                </StatusBadge>
+                {canEdit ? (
+                  <Button
+                    aria-label={`Registrar horas em ${formatMonthLabel(month.month)}`}
+                    title="Registrar horas neste mes"
+                    type="button"
+                    variant="ghost"
+                    onClick={() => onAddHours(month.month)}
+                  >
+                    <Plus size={15} />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {isOpen ? (
+              <div className="border-t border-[color:var(--line)] px-4 py-3">
+                {month.expiredHours > 0 ? (
+                  <p className="mb-2 text-xs text-[color:var(--muted)]">
+                    {formatHours(month.expiredHours)} do saldo anterior expiraram na virada do mes.
+                  </p>
+                ) : null}
+                {month.logs.length ? (
+                  <ul className="grid gap-2 border-l border-[color:var(--line)] pl-4">
+                    {month.logs.map((log) => (
+                      <li className="flex items-start justify-between gap-3" key={log.id}>
+                        <div className="min-w-0">
+                          <p className="whitespace-pre-line text-sm">{log.description}</p>
+                          <p className="mt-0.5 text-xs text-[color:var(--muted)]">
+                            {new Date(log.createdAt).toLocaleDateString("pt-BR")}
+                            {log.createdBy?.name ? ` · ${log.createdBy.name}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span className="text-sm font-semibold">{formatHours(log.hours)}</span>
+                          {canEdit ? (
+                          <Button
+                            aria-label="Remover registro de horas"
+                            disabled={deleteLogMutation.isPending}
+                            type="button"
+                            variant="ghost"
+                            onClick={() => {
+                              if (window.confirm("Remover este registro de horas?")) {
+                                deleteLogMutation.mutate(log.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-[color:var(--muted)]">
+                    Nenhum servico registrado neste mes.
+                  </p>
+                )}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function defaultServiceForm(clientId = ""): ServiceForm {
   return {
     name: "",
@@ -2365,10 +2782,17 @@ function defaultServiceForm(clientId = ""): ServiceForm {
     notes: "",
     clientId,
     monthlyValue: "",
+    monthlyHours: "0",
+    hoursExpirePercent: "0",
+    hoursExpirationMonths: "0",
     paymentDay: "1",
     startDate: toDateInput(new Date()),
     active: true,
   };
+}
+
+function clampInteger(value: string, min: number, max: number) {
+  return String(Math.max(min, Math.min(max, Math.trunc(Number(value || 0)))));
 }
 
 function clampPaymentDay(value: string) {
@@ -4468,6 +4892,8 @@ function TextInput({
   required,
   disabled,
   placeholder,
+  step,
+  min,
 }: {
   label: string;
   value: string;
@@ -4476,6 +4902,8 @@ function TextInput({
   required?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  step?: string;
+  min?: string;
 }) {
   return (
     <label className="block">
@@ -4490,6 +4918,8 @@ function TextInput({
         placeholder={placeholder}
         title={type === "password" ? passwordRuleMessage : undefined}
         required={required}
+        step={step}
+        min={min}
         type={type}
         value={value}
         onChange={(event) => onChange(formatInputValue(label, type, event.target.value))}
@@ -4720,6 +5150,15 @@ function canCurrentUserSignContract(contract: ApiContract, userId?: string) {
   if (!userId || contract.status !== "SENT") return false;
   const participant = (contract.participants ?? []).find((entry) => entry.user.id === userId);
   return Boolean(participant && !participant.signedAt);
+}
+
+function readStoredUserRole() {
+  try {
+    const raw = localStorage.getItem("projectfy-user");
+    return raw ? (JSON.parse(raw) as { role?: string }).role : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function readStoredUserId() {

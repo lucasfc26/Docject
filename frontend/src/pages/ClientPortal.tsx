@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
+import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
 import { apiAssetUrl, apiGet, apiPost, downloadApiAsset, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
@@ -186,12 +187,19 @@ export function ClientPortal() {
           onSigned={() => queryClient.invalidateQueries({ queryKey: ["contracts"] })}
         />
       ) : view === "services" ? (
-        <ServiceClientView
-          healthResults={serviceHealth}
-          isCheckingHealth={isCheckingHealth}
-          service={selectedService}
-          clientName={projectClient}
-        />
+        <>
+          <ServiceClientView
+            healthResults={serviceHealth}
+            isCheckingHealth={isCheckingHealth}
+            service={selectedService}
+            clientName={projectClient}
+          />
+          {selectedService ? (
+            <Panel className="p-6">
+              <ServiceMonthlyReport serviceId={selectedService.id} />
+            </Panel>
+          ) : null}
+        </>
       ) : (
         <>
 

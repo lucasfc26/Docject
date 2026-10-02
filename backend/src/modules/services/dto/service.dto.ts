@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from "class-validator";
 
 export class ServiceHealthCheckDto {
   @IsOptional()
@@ -53,6 +53,24 @@ export class CreateServiceDto {
   @IsNumber()
   @Min(0)
   monthlyValue!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(744)
+  monthlyHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  hoursExpirePercent?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  hoursExpirationMonths?: number;
 
   @IsInt()
   @Min(1)
@@ -113,6 +131,24 @@ export class UpdateServiceDto {
   monthlyValue?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(744)
+  monthlyHours?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  hoursExpirePercent?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  hoursExpirationMonths?: number;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(31)
@@ -133,4 +169,39 @@ export class UpdateServiceDto {
   @IsOptional()
   @IsString()
   fileName?: string;
+}
+
+export class CreateServiceWorkLogDto {
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/)
+  month!: string;
+
+  @IsNumber()
+  @Min(0.01)
+  @Max(744)
+  hours!: number;
+
+  @IsString()
+  @MaxLength(1000)
+  description!: string;
+}
+
+export class UpdateServiceReportDto {
+  @IsOptional()
+  @IsIn(["OK", "ATTENTION", "FAILED", "NOT_APPLICABLE", ""])
+  backupStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  backupNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  incidentNotes?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(8000)
+  otherOccurrences?: string;
 }

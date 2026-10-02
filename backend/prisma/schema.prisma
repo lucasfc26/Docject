@@ -74,6 +74,8 @@ model User {
   signatureLogs ContractSignatureLog[]
   refreshTokens RefreshToken[]
   passwordResetTokens PasswordResetToken[]
+  serviceWorkLogs ServiceWorkLog[]
+  serviceReports  ServiceMonthlyReport[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -284,6 +286,9 @@ model Service {
   healthChecks   Json                   @default("[]")
   notes          String?
   monthlyValue   Decimal                @default(0)
+  monthlyHours   Decimal                @default(0)
+  hoursExpirePercent    Int             @default(0)
+  hoursExpirationMonths Int             @default(0)
   paymentDay     Int
   startDate      DateTime
   active         Boolean                @default(true)
@@ -292,8 +297,66 @@ model Service {
   client         Client                 @relation(fields: [clientId], references: [id])
   clientId       String
   transactions   FinancialTransaction[]
+  workLogs       ServiceWorkLog[]
+  healthSamples  ServiceHealthSample[]
+  monthlyReports ServiceMonthlyReport[]
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
+}
+
+model ServiceHealthSample {
+  id             String   @id @default(uuid())
+  service        Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId      String
+  checkKey       String
+  checkName      String
+  online         Boolean
+  status         String
+  responseTimeMs Int?
+  summary        String?
+  components     Json     @default("[]")
+  checkedAt      DateTime @default(now())
+
+  @@index([serviceId, checkedAt])
+  @@index([checkedAt])
+}
+
+model ServiceMonthlyReport {
+  id                  String    @id @default(uuid())
+  service             Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId           String
+  month               String
+  availabilityPercent Float?
+  samplesTotal        Int       @default(0)
+  samplesOnline       Int       @default(0)
+  monitoring          Json      @default("[]")
+  autoIncidents       Json      @default("[]")
+  backupSummary       Json?
+  backupStatus        String?
+  backupNotes         String?
+  incidentNotes       String?
+  otherOccurrences    String?
+  closedAt            DateTime?
+  updatedBy           User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([serviceId, month])
+}
+
+model ServiceWorkLog {
+  id          String   @id @default(uuid())
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId   String
+  month       String
+  hours       Decimal
+  description String
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([serviceId, month])
 }
 
 model Appointment {

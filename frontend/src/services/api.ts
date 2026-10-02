@@ -351,6 +351,9 @@ export type ApiService = {
   healthChecks?: ApiServiceHealthCheck[];
   notes?: string;
   monthlyValue: string;
+  monthlyHours?: string | number;
+  hoursExpirePercent?: number;
+  hoursExpirationMonths?: number;
   paymentDay: number;
   startDate: string;
   active: boolean;
@@ -359,6 +362,106 @@ export type ApiService = {
   clientId: string;
   client?: { id?: string; name: string };
   transactions?: ApiTransaction[];
+};
+
+export type ApiServiceWorkLog = {
+  id: string;
+  month: string;
+  hours: number;
+  description: string;
+  createdAt: string;
+  createdBy?: { id: string; name: string } | null;
+};
+
+export type ApiServiceHoursMonth = {
+  month: string;
+  monthlyHours: number;
+  carriedHours: number;
+  expiredHours: number;
+  availableHours: number;
+  usedHours: number;
+  remainingHours: number;
+  overageHours: number;
+  cohorts: Array<{ originMonth: string; hours: number }>;
+  logs: ApiServiceWorkLog[];
+};
+
+export type ApiServiceHours = {
+  monthlyHours: number;
+  hoursExpirePercent: number;
+  hoursExpirationMonths: number;
+  months: ApiServiceHoursMonth[];
+};
+
+export type ApiServiceReportSummary = {
+  month: string;
+  status: "OPEN" | "CLOSED";
+  availabilityPercent: number | null;
+};
+
+export type ApiServiceBackupStatus = "OK" | "ATTENTION" | "FAILED" | "NOT_APPLICABLE";
+
+export type ApiServiceReport = {
+  serviceId: string;
+  serviceName: string;
+  clientName: string | null;
+  month: string;
+  status: "OPEN" | "CLOSED";
+  current?: boolean;
+  closedAt: string | null;
+  updatedAt: string | null;
+  updatedBy: { id: string; name: string } | null;
+  availability: {
+    percent: number | null;
+    samplesTotal: number;
+    samplesOnline: number;
+    intervalMinutes: number;
+    checks: Array<{
+      checkKey: string;
+      checkName: string;
+      samplesTotal: number;
+      samplesOnline: number;
+      availabilityPercent: number | null;
+      downtimeMinutes: number;
+      avgResponseMs: number | null;
+    }>;
+  };
+  incidents: {
+    auto: Array<{
+      checkName: string;
+      startedAt: string;
+      endedAt: string | null;
+      durationMinutes: number;
+      summary: string | null;
+    }>;
+    notes: string | null;
+  };
+  backup: {
+    status: ApiServiceBackupStatus | null;
+    manualStatus: ApiServiceBackupStatus | null;
+    summary: {
+      samplesTotal: number;
+      samplesOk: number;
+      lastDetail: string | null;
+      lastCheckedAt: string | null;
+      autoStatus: ApiServiceBackupStatus | null;
+    } | null;
+    notes: string | null;
+  };
+  hours: {
+    monthlyHours: number;
+    usedHours: number;
+    availableHours: number;
+    remainingHours: number;
+    overageHours: number;
+    logs: ApiServiceWorkLog[];
+  };
+  carriedHours: {
+    hours: number;
+    expiredHours: number;
+    cohorts: Array<{ originMonth: string; hours: number }>;
+  };
+  otherOccurrences: string | null;
 };
 
 export type ApiServiceHealthCheck = {

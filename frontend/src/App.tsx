@@ -94,7 +94,7 @@ function readStoredUser() {
 const allowedPathsByRole: Record<string, Set<string>> = {
   ADMIN: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
   MANAGER: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
-  FINANCIAL: new Set(["/dashboard", "/financial", "/settings", "/mudar-senha"]),
+  FINANCIAL: new Set(["/dashboard", "/services", "/financial", "/settings", "/mudar-senha"]),
   CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/settings", "/mudar-senha"]),
 };
 
