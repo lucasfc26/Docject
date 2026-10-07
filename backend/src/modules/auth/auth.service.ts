@@ -1,11 +1,12 @@
 import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcrypt";
-import { randomBytes, randomInt } from "crypto";
+import { createHash, randomBytes, randomInt } from "crypto";
 import { MailService } from "../../common/mail/mail.service";
 import { PrismaService } from "../../prisma/prisma.service";
 
 const passwordResetTtlMs = 60 * 60 * 1000;
+const refreshTokenTtlMs = 1000 * 60 * 60 * 24 * 30;
 
 @Injectable()
 export class AuthService {
@@ -27,14 +28,7 @@ export class AuthService {
       throw new UnauthorizedException("Invalid credentials");
     }
 
-    const refreshToken = randomBytes(48).toString("hex");
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash: await bcrypt.hash(refreshToken, 10),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-      },
-    });
+    const refreshToken = await this.issueRefreshToken(user.id);
 
     return {
       accessToken: this.sign(user.id, user.role),
@@ -60,14 +54,7 @@ export class AuthService {
       select: { id: true, name: true, email: true, role: true },
     });
 
-    const refreshToken = randomBytes(48).toString("hex");
-    await this.prisma.refreshToken.create({
-      data: {
-        tokenHash: await bcrypt.hash(refreshToken, 10),
-        userId: user.id,
-        expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 30),
-      },
-    });
+    const refreshToken = await this.issueRefreshToken(user.id);
 
     return {
       accessToken: this.sign(user.id, user.role),
@@ -77,25 +64,37 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const candidates = await this.prisma.refreshToken.findMany({
-      where: { revoked: false, expiresAt: { gt: new Date() } },
+    const record = await this.prisma.refreshToken.findFirst({
+      where: { tokenHash: hashRefreshToken(refreshToken), revoked: false, expiresAt: { gt: new Date() } },
       include: { user: true },
     });
-    const record = await asyncFind(candidates, (candidate) =>
-      bcrypt.compare(refreshToken, candidate.tokenHash),
-    );
     if (!record) throw new UnauthorizedException("Invalid refresh token");
     return { accessToken: this.sign(record.user.id, record.user.role) };
   }
 
   async logout(refreshToken?: string) {
     if (!refreshToken) return { ok: true };
-    const candidates = await this.prisma.refreshToken.findMany({ where: { revoked: false } });
-    const record = await asyncFind(candidates, (candidate) =>
-      bcrypt.compare(refreshToken, candidate.tokenHash),
-    );
-    if (record) await this.prisma.refreshToken.update({ where: { id: record.id }, data: { revoked: true } });
+    await this.prisma.refreshToken.updateMany({
+      where: { tokenHash: hashRefreshToken(refreshToken), revoked: false },
+      data: { revoked: true },
+    });
     return { ok: true };
+  }
+
+  /** Refresh tokens are long random strings, so a SHA-256 digest is enough and can be looked up by index. */
+  private async issueRefreshToken(userId: string) {
+    const refreshToken = randomBytes(48).toString("hex");
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId, OR: [{ revoked: true }, { expiresAt: { lt: new Date() } }] },
+    });
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: hashRefreshToken(refreshToken),
+        userId,
+        expiresAt: new Date(Date.now() + refreshTokenTtlMs),
+      },
+    });
+    return refreshToken;
   }
 
   async forgotPassword(email: string) {
@@ -225,9 +224,6 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-async function asyncFind<T>(items: T[], predicate: (item: T) => Promise<boolean>) {
-  for (const item of items) {
-    if (await predicate(item)) return item;
-  }
-  return undefined;
+function hashRefreshToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
 }

@@ -115,16 +115,7 @@ export async function resetPassword(email: string, code: string, password: strin
 }
 
 export async function changePassword(currentPassword: string, password: string) {
-  assertConsent();
-  await ensureToken();
-  const response = await fetch(`${API_URL}/auth/change-password`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}),
-    },
-    body: JSON.stringify({ currentPassword, password }),
-  });
+  const response = await authFetch("/auth/change-password", jsonRequest("POST", { currentPassword, password }));
   await assertOk(response, "Nao foi possivel alterar a senha");
   return response.json() as Promise<{ ok: boolean }>;
 }
@@ -146,28 +137,13 @@ export function logout() {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  assertConsent();
-  await ensureToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: memoryToken
-      ? { Authorization: `Bearer ${memoryToken}` }
-      : undefined,
-  });
+  const response = await authFetch(path);
   await assertOk(response, `Erro ao carregar ${path}`);
   return response.json() as Promise<T>;
 }
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  assertConsent();
-  await ensureToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+  const response = await authFetch(path, jsonRequest("POST", body));
   await assertOk(response, `Erro ao criar registro em ${path}`);
   return response.json() as Promise<T>;
 }
@@ -177,63 +153,56 @@ export async function apiResetUserPassword(userId: string) {
 }
 
 export async function apiUploadContractPdf(file: File): Promise<ApiFileUpload> {
-  assertConsent();
-  await ensureToken();
-  const formData = new FormData();
-  formData.append("file", file);
-  const response = await fetch(`${API_URL}/uploads/contracts`, {
-    method: "POST",
-    headers: memoryToken
-      ? { Authorization: `Bearer ${memoryToken}` }
-      : undefined,
-    body: formData,
-  });
+  const response = await authFetch("/uploads/contracts", fileRequest(file));
   await assertOk(response, "Erro ao enviar contrato em PDF");
   return response.json() as Promise<ApiFileUpload>;
 }
 
 export async function apiUploadAttachment(file: File): Promise<ApiFileUpload> {
-  assertConsent();
-  await ensureToken();
-  const formData = new FormData();
-  formData.append("file", file);
-  const response = await fetch(`${API_URL}/uploads/attachments`, {
-    method: "POST",
-    headers: memoryToken
-      ? { Authorization: `Bearer ${memoryToken}` }
-      : undefined,
-    body: formData,
-  });
+  const response = await authFetch("/uploads/attachments", fileRequest(file));
   await assertOk(response, "Erro ao enviar arquivo ZIP do projeto");
   return response.json() as Promise<ApiFileUpload>;
 }
 
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  assertConsent();
-  await ensureToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      ...(memoryToken ? { Authorization: `Bearer ${memoryToken}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+  const response = await authFetch(path, jsonRequest("PATCH", body));
   await assertOk(response, `Erro ao atualizar registro em ${path}`);
   return response.json() as Promise<T>;
 }
 
 export async function apiDelete<T>(path: string): Promise<T> {
-  assertConsent();
-  await ensureToken();
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "DELETE",
-    headers: memoryToken
-      ? { Authorization: `Bearer ${memoryToken}` }
-      : undefined,
-  });
+  const response = await authFetch(path, { method: "DELETE" });
   await assertOk(response, `Erro ao remover registro em ${path}`);
   return response.json() as Promise<T>;
+}
+
+function jsonRequest(method: string, body: unknown): RequestInit {
+  return { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+}
+
+function fileRequest(file: File): RequestInit {
+  const formData = new FormData();
+  formData.append("file", file);
+  return { method: "POST", body: formData };
+}
+
+/**
+ * Authenticated request: renews the access token shortly before it expires and, if the API
+ * still answers 401, renews once more and repeats the request.
+ */
+async function authFetch(path: string, init: RequestInit = {}) {
+  assertConsent();
+  await ensureToken();
+  const send = (token: string | null) =>
+    fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { ...(init.headers as Record<string, string> | undefined), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    });
+  const sentToken = memoryToken;
+  const response = await send(sentToken);
+  if (response.status !== 401) return response;
+  await renewToken(sentToken);
+  return send(memoryToken);
 }
 
 export async function apiValidateContract(code: string): Promise<ApiContract> {
@@ -265,10 +234,16 @@ async function assertOk(response: Response, fallback: string) {
 }
 
 let pendingToken: Promise<void> | null = null;
+const TOKEN_RENEW_MARGIN_MS = 2 * 60_000;
 
-// Shared so the queries a screen fires in parallel trigger a single refresh.
 function ensureToken() {
-  if (memoryToken) return Promise.resolve();
+  if (memoryToken && !tokenExpiresSoon(memoryToken)) return Promise.resolve();
+  return renewToken(memoryToken);
+}
+
+// Shared so the requests a screen fires in parallel trigger a single refresh.
+function renewToken(staleToken: string | null) {
+  if (memoryToken && memoryToken !== staleToken) return Promise.resolve();
   pendingToken ??= obtainToken().finally(() => {
     pendingToken = null;
   });
@@ -289,10 +264,25 @@ async function obtainToken() {
       localStorage.setItem("projectfy-access-token", data.accessToken);
       return;
     }
+    if (response.status !== 401) throw new Error("Nao foi possivel renovar a sessao. Tente novamente.");
   }
 
   if (import.meta.env.DEV) {
     await login("admin@projectfy.io", "projectfy");
+    return;
+  }
+
+  logout();
+  window.location.assign("/login");
+  throw new Error("Sua sessao expirou. Entre novamente.");
+}
+
+function tokenExpiresSoon(token: string) {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { exp?: number };
+    return !payload.exp || payload.exp * 1000 - Date.now() < TOKEN_RENEW_MARGIN_MS;
+  } catch {
+    return true;
   }
 }
 
@@ -547,9 +537,19 @@ export type ApiContractSignatureLog = {
   latitude?: number;
   longitude?: number;
   geoAccuracy?: number;
+  deviceInfo?: Partial<ContractDeviceInfo>;
   tokenHash?: string;
   documentHash?: string;
   signedAt: string;
+};
+
+export type ContractDeviceInfo = {
+  platform: string;
+  language: string;
+  timezone: string;
+  screen: string;
+  pixelRatio: number;
+  touchPoints: number;
 };
 
 export type ContractSignPayload = {
@@ -558,6 +558,7 @@ export type ContractSignPayload = {
   longitude: number;
   geoAccuracy?: number;
   acceptedTerms: true;
+  deviceInfo: ContractDeviceInfo;
 };
 
 export function contractParticipantLabel(

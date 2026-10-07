@@ -124,6 +124,7 @@ function addSignatureLogPages(
       latitude?: number | null;
       longitude?: number | null;
       geoAccuracy?: number | null;
+      deviceInfo?: unknown;
       tokenHash?: string | null;
       documentHash?: string | null;
       signedAt: Date;
@@ -176,6 +177,8 @@ function addSignatureLogPages(
     line(`CPF: ${log.signerCpf ?? "-"}`);
     line(`IP: ${log.ipAddress ?? "-"}`);
     if (log.userAgent) line(`User-Agent: ${log.userAgent}`);
+    const device = formatDeviceInfo(log.deviceInfo);
+    if (device) line(`Dispositivo: ${device}`);
     line(`Token SHA-256: ${log.tokenHash ?? "-"}`);
     line(`Hash documento no momento da assinatura: ${log.documentHash ?? "-"}`);
     if (log.latitude != null && log.longitude != null) {
@@ -202,6 +205,23 @@ function addSignatureLogPages(
       color: rgb(0.78, 0.8, 0.84),
     });
   }
+}
+
+function formatDeviceInfo(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const info = value as Record<string, unknown>;
+  const labels: Array<[string, string]> = [
+    ["platform", "sistema"],
+    ["language", "idioma"],
+    ["timezone", "fuso"],
+    ["screen", "tela"],
+    ["pixelRatio", "densidade"],
+    ["touchPoints", "toque"],
+  ];
+  return labels
+    .filter(([key]) => info[key] != null && info[key] !== "")
+    .map(([key, label]) => `${label} ${String(info[key])}`)
+    .join(" | ");
 }
 
 function uploadedContractPath(fileUrl: string) {

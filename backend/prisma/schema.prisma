@@ -89,6 +89,8 @@ model RefreshToken {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   createdAt DateTime @default(now())
+
+  @@index([tokenHash])
 }
 
 model PasswordResetToken {
@@ -257,6 +259,7 @@ model ContractSignatureLog {
   latitude       Float?
   longitude      Float?
   geoAccuracy    Float?
+  deviceInfo     Json?
   tokenHash      String?
   documentHash   String?
   signedAt       DateTime @default(now())

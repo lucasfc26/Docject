@@ -1,8 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Eye, EyeOff, FileSignature, Loader2, MapPin, MonitorSmartphone, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, EyeOff, FileSignature, Globe, Loader2, MapPin, MonitorSmartphone, RotateCcw, UserCheck, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { apiPost, type ApiContract, type ContractSignPayload } from "../services/api";
+import { apiPost, type ApiContract, type ContractDeviceInfo, type ContractSignPayload } from "../services/api";
 import { Button, Panel } from "./ui";
 
 type LocationState =
@@ -14,8 +14,8 @@ type LocationState =
 
 /**
  * Collects everything a signature needs to be legally consistent: account password,
- * location, consent to record device data and acceptance of the terms. The sign button
- * stays locked until every item is satisfied.
+ * identity (name, e-mail, CPF), location, IP, device data and acceptance of the terms.
+ * Each item has its own required switch; the sign button stays locked until all are satisfied.
  */
 export function SignContractDialog({
   contract,
@@ -29,8 +29,12 @@ export function SignContractDialog({
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [location, setLocation] = useState<LocationState>({ status: "off" });
-  const [deviceConsent, setDeviceConsent] = useState(false);
+  const [identityConsent, setIdentityConsent] = useState(false);
+  const [ipConsent, setIpConsent] = useState(false);
+  const [deviceInfo, setDeviceInfo] = useState<ContractDeviceInfo | null>(null);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const signer = currentParticipant(contract);
+  const missingCpf = Boolean(signer && !signer.user.cpf);
   const requestId = useRef(0);
 
   const requestLocation = useCallback(async () => {
@@ -113,7 +117,9 @@ export function SignContractDialog({
   };
 
   const resetPermissions = () => {
-    setDeviceConsent(false);
+    setIdentityConsent(false);
+    setIpConsent(false);
+    setDeviceInfo(null);
     setAcceptedTerms(false);
     void requestLocation();
   };
@@ -121,12 +127,14 @@ export function SignContractDialog({
   const signMutation = useMutation({
     mutationFn: () => {
       if (location.status !== "granted") throw new Error("Localizacao obrigatoria para assinar.");
+      if (!deviceInfo) throw new Error("Autorize o registro do dispositivo para assinar.");
       const payload: ContractSignPayload = {
         password,
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         geoAccuracy: location.coords.accuracy,
         acceptedTerms: true,
+        deviceInfo,
       };
       return apiPost<ApiContract>(`/contracts/${contract.id}/sign`, payload);
     },
@@ -139,11 +147,14 @@ export function SignContractDialog({
 
   const locationOk = location.status === "granted";
   const missingPermission = location.status === "denied" || location.status === "error";
-  const ready = locationOk && deviceConsent && acceptedTerms && password.length > 0;
+  const ready =
+    !missingCpf && identityConsent && locationOk && ipConsent && Boolean(deviceInfo) && acceptedTerms && password.length > 0;
   const pending: string[] = [];
   if (!password) pending.push("digitar sua senha");
+  if (!identityConsent) pending.push("confirmar sua identificacao");
   if (!locationOk) pending.push("permitir a localizacao");
-  if (!deviceConsent) pending.push("autorizar o registro do dispositivo");
+  if (!ipConsent) pending.push("autorizar o registro do IP");
+  if (!deviceInfo) pending.push("autorizar o registro do dispositivo");
   if (!acceptedTerms) pending.push("aceitar os termos");
 
   return createPortal(
@@ -196,6 +207,19 @@ export function SignContractDialog({
           <div className="grid gap-2">
             <span className="mono-label text-[color:var(--muted)]">Permissoes obrigatorias</span>
             <PermissionSwitch
+              checked={identityConsent}
+              description={
+                signer
+                  ? `${signer.user.name} · ${signer.user.email} · CPF ${signer.user.cpf ?? "nao cadastrado"}`
+                  : "Nome, e-mail e CPF da sua conta."
+              }
+              disabled={missingCpf}
+              icon={<UserCheck size={18} />}
+              label="Identificacao do assinante"
+              status={identityConsent ? <StatusOk text="Confirmado" /> : null}
+              onChange={setIdentityConsent}
+            />
+            <PermissionSwitch
               checked={location.status !== "off"}
               description="Registra a localizacao aproximada no log da assinatura."
               icon={<MapPin size={18} />}
@@ -204,14 +228,38 @@ export function SignContractDialog({
               onChange={toggleLocation}
             />
             <PermissionSwitch
-              checked={deviceConsent}
-              description="Registra IP, navegador, data e hora da assinatura."
+              checked={ipConsent}
+              description="O servidor registra o endereco IP publico da sua conexao."
+              icon={<Globe size={18} />}
+              label="Endereco IP"
+              status={ipConsent ? <StatusOk /> : null}
+              onChange={setIpConsent}
+            />
+            <PermissionSwitch
+              checked={Boolean(deviceInfo)}
+              description="Navegador (user-agent), sistema, idioma, fuso horario e tela."
               icon={<MonitorSmartphone size={18} />}
-              label="Dados do dispositivo"
-              status={deviceConsent ? <StatusOk /> : null}
-              onChange={setDeviceConsent}
+              label="Navegador e dispositivo"
+              status={deviceInfo ? <StatusOk text={describeDevice(deviceInfo)} /> : null}
+              onChange={(enabled) => setDeviceInfo(enabled ? collectDeviceInfo() : null)}
             />
           </div>
+
+          {missingCpf ? (
+            <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm">
+              <p className="flex items-center gap-2 font-semibold text-rose-600 dark:text-rose-300">
+                <AlertTriangle size={16} />
+                Nao foi possivel assinar: sua conta nao tem CPF cadastrado.
+              </p>
+              <p className="mt-2 text-[color:var(--muted)]">
+                Cadastre o CPF em{" "}
+                <a className="font-semibold underline" href="/settings">
+                  Configuracoes
+                </a>{" "}
+                e volte para assinar.
+              </p>
+            </div>
+          ) : null}
 
           {missingPermission ? (
             <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm">
@@ -249,10 +297,15 @@ export function SignContractDialog({
               <a className="font-semibold underline" href="/privacidade" rel="noopener noreferrer" target="_blank">
                 Politica de Privacidade
               </a>
-              . Entendo que a senha, a localizacao e os dados do dispositivo sao necessarios para consolidar esta
-              assinatura eletronica e garantir a validade juridica do contrato.
+              . Entendo que a senha, minha identificacao, a localizacao, o IP e os dados do dispositivo sao necessarios
+              para consolidar esta assinatura eletronica e garantir a validade juridica do contrato.
             </span>
           </label>
+
+          <p className="text-xs text-[color:var(--muted)]">
+            Tambem ficam registrados automaticamente: data e hora (UTC), hash SHA-256 do documento assinado e hash da
+            sua sessao autenticada. Tudo aparece no log de assinaturas anexado ao PDF final.
+          </p>
 
           {!ready && !missingPermission ? (
             <p className="text-xs text-[color:var(--muted)]">Para assinar, falta: {pending.join(", ")}.</p>
@@ -280,6 +333,7 @@ export function SignContractDialog({
 
 function PermissionSwitch({
   checked,
+  disabled = false,
   label,
   description,
   icon,
@@ -287,6 +341,7 @@ function PermissionSwitch({
   onChange,
 }: {
   checked: boolean;
+  disabled?: boolean;
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -298,7 +353,7 @@ function PermissionSwitch({
       <span className="text-[color:var(--muted)]">{icon}</span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold">{label}</p>
-        <p className="text-xs text-[color:var(--muted)]">{description}</p>
+        <p className="break-words text-xs text-[color:var(--muted)]">{description}</p>
         {status ? <div className="mt-1 text-xs">{status}</div> : null}
       </div>
       <button
@@ -306,7 +361,8 @@ function PermissionSwitch({
         aria-label={label}
         className={`relative h-6 w-11 shrink-0 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)] ${
           checked ? "bg-[color:var(--primary)] dark:bg-[color:var(--warning)]" : "bg-[color:var(--line)]"
-        }`}
+        } disabled:cursor-not-allowed disabled:opacity-40`}
+        disabled={disabled}
         role="switch"
         type="button"
         onClick={() => onChange(!checked)}
@@ -352,4 +408,30 @@ async function locationPermissionState() {
   } catch {
     return undefined;
   }
+}
+
+function currentParticipant(contract: ApiContract) {
+  try {
+    const raw = localStorage.getItem("projectfy-user");
+    const userId = raw ? (JSON.parse(raw) as { id?: string }).id : undefined;
+    return (contract.participants ?? []).find((participant) => participant.user.id === userId);
+  } catch {
+    return undefined;
+  }
+}
+
+function collectDeviceInfo(): ContractDeviceInfo {
+  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData;
+  return {
+    platform: uaData?.platform || navigator.platform || "desconhecido",
+    language: navigator.language,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    screen: `${window.screen.width}x${window.screen.height}`,
+    pixelRatio: window.devicePixelRatio,
+    touchPoints: navigator.maxTouchPoints ?? 0,
+  };
+}
+
+function describeDevice(info: ContractDeviceInfo) {
+  return `${info.platform} · ${info.language} · ${info.timezone} · ${info.screen}`;
 }

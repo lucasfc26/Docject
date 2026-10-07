@@ -85,15 +85,15 @@ button {
   grid-template-columns: 280px minmax(0, 1fr);
 }
 
+/* No backdrop-filter here: panels sit on a flat gradient, and blurring every card made scrolling janky. */
 .glass-panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  box-shadow: 0 20px 80px rgba(7, 23, 43, 0.1);
-  backdrop-filter: blur(22px);
+  box-shadow: 0 12px 40px rgba(7, 23, 43, 0.08);
 }
 
 .dark .glass-panel {
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.24);
 }
 
 .dark .brand-logo {

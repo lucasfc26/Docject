@@ -1722,6 +1722,11 @@ function ContractSignaturesPanel({
               <p className="mt-3 truncate font-mono text-xs text-[color:var(--muted)]">
                 User-Agent: {log.userAgent ?? "-"}
               </p>
+              {log.deviceInfo ? (
+                <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+                  Dispositivo: {[log.deviceInfo.platform, log.deviceInfo.language, log.deviceInfo.timezone, log.deviceInfo.screen].filter(Boolean).join(" · ")}
+                </p>
+              ) : null}
               <p className="mt-1 truncate font-mono text-xs text-[color:var(--muted)]">
                 Token: {log.tokenHash ?? "-"}
               </p>

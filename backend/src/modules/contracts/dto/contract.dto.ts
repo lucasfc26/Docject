@@ -1,4 +1,4 @@
-import { Equals, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from "class-validator";
+import { Equals, IsIn, IsInt, IsObject, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from "class-validator";
 
 export class CreateContractDto {
   @IsString()
@@ -91,6 +91,9 @@ export class SignContractDto {
 
   @Equals(true, { message: "Aceite os termos de uso para assinar o contrato." })
   acceptedTerms!: boolean;
+
+  @IsObject({ message: "Autorize o registro dos dados do dispositivo para assinar o contrato." })
+  deviceInfo!: Record<string, unknown>;
 
   @IsOptional()
   @IsNumber()

@@ -30,7 +30,7 @@ import { PrismaModule } from "./prisma/prisma.module";
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET ?? "local-dev-secret",
-      signOptions: { expiresIn: "15m" }
+      signOptions: { expiresIn: "1h" }
     }),
     PrismaModule,
     AuthModule,

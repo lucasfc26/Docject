@@ -400,6 +400,7 @@ export class ContractsController {
 
     const roleLabel = participantLabel(participant.role, participant.witnessIndex);
     const documentHash = await uploadedContractHash(contract.versions);
+    const deviceInfo = sanitizeDeviceInfo(body.deviceInfo);
     const token = bearerToken(request);
     const signedAt = new Date();
 
@@ -421,6 +422,7 @@ export class ContractsController {
         latitude: body.latitude,
         longitude: body.longitude,
         geoAccuracy: body.geoAccuracy,
+        deviceInfo,
         tokenHash: token ? sha256(token) : undefined,
         documentHash,
       },
@@ -442,6 +444,7 @@ export class ContractsController {
           latitude: body.latitude,
           longitude: body.longitude,
           acceptedTerms: body.acceptedTerms,
+          deviceInfo,
         },
         ipAddress: requestIp(request),
       },
@@ -623,6 +626,18 @@ async function uploadedContractHash(versions: Array<{ version: number; fileUrl?:
   if (!pathname.startsWith("/uploads/contracts/")) return undefined;
   const bytes = await readFile(join(process.cwd(), "uploads", "contracts", basename(pathname)));
   return sha256(bytes);
+}
+
+const deviceInfoKeys = ["platform", "language", "timezone", "screen", "pixelRatio", "touchPoints"] as const;
+
+/** Keeps only the known device fields, as short strings, so the client cannot store arbitrary data. */
+function sanitizeDeviceInfo(value: Record<string, unknown>) {
+  const result: Record<string, string> = {};
+  for (const key of deviceInfoKeys) {
+    const item = value?.[key];
+    if (typeof item === "string" || typeof item === "number") result[key] = String(item).slice(0, 120);
+  }
+  return result;
 }
 
 function bearerToken(request: AuthenticatedRequest) {
