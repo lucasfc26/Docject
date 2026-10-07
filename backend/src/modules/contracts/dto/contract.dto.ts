@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from "class-validator";
+import { Equals, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min, ValidateIf } from "class-validator";
 
 export class CreateContractDto {
   @IsString()
@@ -79,17 +79,18 @@ export class SignContractDto {
   @IsString()
   password!: string;
 
-  @IsOptional()
-  @IsNumber()
+  @IsNumber({}, { message: "Permita a localizacao para assinar o contrato." })
   @Min(-90)
   @Max(90)
-  latitude?: number;
+  latitude!: number;
 
-  @IsOptional()
-  @IsNumber()
+  @IsNumber({}, { message: "Permita a localizacao para assinar o contrato." })
   @Min(-180)
   @Max(180)
-  longitude?: number;
+  longitude!: number;
+
+  @Equals(true, { message: "Aceite os termos de uso para assinar o contrato." })
+  acceptedTerms!: boolean;
 
   @IsOptional()
   @IsNumber()

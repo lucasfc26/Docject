@@ -554,35 +554,11 @@ export type ApiContractSignatureLog = {
 
 export type ContractSignPayload = {
   password: string;
-  latitude?: number;
-  longitude?: number;
+  latitude: number;
+  longitude: number;
   geoAccuracy?: number;
+  acceptedTerms: true;
 };
-
-export async function buildContractSignPayload(
-  password: string,
-  shareLocation: boolean,
-): Promise<ContractSignPayload> {
-  const payload: ContractSignPayload = { password };
-  if (!shareLocation || !navigator.geolocation) return payload;
-
-  try {
-    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: false,
-        maximumAge: 60_000,
-        timeout: 10_000,
-      });
-    });
-    payload.latitude = position.coords.latitude;
-    payload.longitude = position.coords.longitude;
-    payload.geoAccuracy = position.coords.accuracy;
-  } catch {
-    // Localizacao indisponivel — segue sem geo.
-  }
-
-  return payload;
-}
 
 export function contractParticipantLabel(
   role: ApiContractParticipant["role"],

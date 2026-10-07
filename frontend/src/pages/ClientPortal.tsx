@@ -6,7 +6,8 @@ import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
 import { GovSignatureSection } from "../components/GovSignatureSection";
-import { apiAssetUrl, apiGet, apiPost, downloadApiAsset, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
+import { SignContractDialog } from "../components/SignContractDialog";
+import { apiAssetUrl, apiGet, apiPost, downloadApiAsset, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
   const queryClient = useQueryClient();
@@ -450,24 +451,9 @@ function ContractSignatureView({
   userId?: string;
   onSigned: () => void;
 }) {
-  const [password, setPassword] = useState("");
-  const [shareLocation, setShareLocation] = useState(false);
+  const [signing, setSigning] = useState(false);
   const [participantEmail, setParticipantEmail] = useState("");
   const [participantRole, setParticipantRole] = useState<"CONTRACTOR" | "WITNESS">("CONTRACTOR");
-  const signMutation = useMutation({
-    mutationFn: async () => {
-      return apiPost<ApiContract>(
-        `/contracts/${contract?.id}/sign`,
-        await buildContractSignPayload(password, shareLocation),
-      );
-    },
-    onSuccess: () => {
-      setPassword("");
-      setShareLocation(false);
-      onSigned();
-    },
-    meta: { successMessage: "Contrato assinado com sucesso." },
-  });
   const addParticipantMutation = useMutation({
     mutationFn: () =>
       apiPost<ApiContract>(`/contracts/${contract?.id}/participants`, {
@@ -532,39 +518,13 @@ function ContractSignatureView({
           </Button>
         </div>
         {canSign ? (
-          <form
-            className="mt-5 grid gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              signMutation.mutate();
-            }}
-          >
-            <label className="block">
-              <span className="mono-label text-[color:var(--muted)]">Senha da conta</span>
-              <input
-                className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-                required
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </label>
-            <label className="flex items-start gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 text-sm">
-              <input
-                checked={shareLocation}
-                className="mt-1"
-                type="checkbox"
-                onChange={(event) => setShareLocation(event.target.checked)}
-              />
-              <span className="text-[color:var(--muted)]">
-                Compartilhar localizacao aproximada no registro da assinatura (opcional).
-              </span>
-            </label>
-            <Button disabled={signMutation.isPending || !password} type="submit">
-              <FileSignature size={17} />
-              Assinar
-            </Button>
-          </form>
+          <Button className="mt-5 w-full" type="button" onClick={() => setSigning(true)}>
+            <FileSignature size={17} />
+            Assinar contrato
+          </Button>
+        ) : null}
+        {signing ? (
+          <SignContractDialog contract={contract} onClose={() => setSigning(false)} onSigned={onSigned} />
         ) : null}
         <div className="mt-5">
           <GovSignatureSection contract={contract} userId={userId} onSigned={onSigned} />

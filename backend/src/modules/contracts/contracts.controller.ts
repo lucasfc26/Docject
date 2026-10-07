@@ -441,6 +441,7 @@ export class ContractsController {
           documentHash,
           latitude: body.latitude,
           longitude: body.longitude,
+          acceptedTerms: body.acceptedTerms,
         },
         ipAddress: requestIp(request),
       },
@@ -695,6 +696,9 @@ function buildSignedDescription(
     ip ? `IP: ${ip}.` : undefined,
     body?.latitude != null && body?.longitude != null
       ? `Localizacao compartilhada: latitude ${body.latitude} e longitude ${body.longitude}.`
+      : undefined,
+    body?.acceptedTerms
+      ? "Aceitou os Termos de Uso e autorizou o registro de senha, localizacao e dados do dispositivo para validade juridica da assinatura."
       : undefined,
   ].filter(Boolean);
   return parts.join(" ");

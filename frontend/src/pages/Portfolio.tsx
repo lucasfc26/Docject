@@ -29,6 +29,7 @@ import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
 import { GovSignatureSection } from "../components/GovSignatureSection";
+import { SignContractDialog } from "../components/SignContractDialog";
 import { scrollToFocusRow, useFocusFromUrl } from "../hooks/useFocusFromUrl";
 import {
   apiDelete,
@@ -40,7 +41,6 @@ import {
   apiResetUserPassword,
   apiUploadAttachment,
   apiUploadContractPdf,
-  buildContractSignPayload,
   contractParticipantLabel,
   sortedContractParticipants,
   type ApiAppointment,
@@ -1155,12 +1155,7 @@ export function ContractsPage() {
     meta: { successMessage: "Contrato excluido." },
   });
 
-  const signMutation = useMutation({
-    mutationFn: async ({ id, password, shareLocation }: { id: string; password: string; shareLocation: boolean }) =>
-      apiPost<ApiContract>(`/contracts/${id}/sign`, await buildContractSignPayload(password, shareLocation)),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
-    meta: { successMessage: "Contrato assinado com sucesso." },
-  });
+  const [signingContract, setSigningContract] = useState<ApiContract | null>(null);
 
   const addParticipantMutation = useMutation({
     mutationFn: ({ id, userId, role }: { id: string; userId: string; role: "CONTRACTOR" | "WITNESS" }) =>
@@ -1335,16 +1330,8 @@ export function ContractsPage() {
                         ) : null}
                         {canSign ? (
                           <Button
-                            disabled={signMutation.isPending}
                             variant="secondary"
-                            onClick={async () => {
-                              const password = window.prompt("Digite sua senha para assinar este contrato:");
-                              if (!password) return;
-                              const shareLocation = window.confirm(
-                                "Compartilhar localizacao aproximada no registro da assinatura?",
-                              );
-                              signMutation.mutate({ id: contract.id, password, shareLocation });
-                            }}
+                            onClick={() => setSigningContract(contract)}
                           >
                             <FileSignature size={16} />
                             Assinar
@@ -1584,6 +1571,13 @@ export function ContractsPage() {
           </Panel>
         </div>
       </ModalOverlay>
+      {signingContract ? (
+        <SignContractDialog
+          contract={signingContract}
+          onClose={() => setSigningContract(null)}
+          onSigned={() => queryClient.invalidateQueries({ queryKey: ["contracts"] })}
+        />
+      ) : null}
     </Panel>
   );
 }
