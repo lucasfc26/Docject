@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Req } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Req } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
 import * as bcrypt from "bcrypt";
 import { ContractParticipantRole, Prisma } from "@prisma/client";
@@ -22,6 +22,7 @@ import {
 } from "./contracts.helpers";
 import {
   AddContractParticipantDto,
+  AttachGovSignatureDto,
   CreateContractDto,
   CreateSignedContractDto,
   CreateContractVersionDto,
@@ -465,6 +466,84 @@ export class ContractsController {
     return this.prisma.contract.findUnique({ where: { id }, include: contractInclude });
   }
 
+  /**
+   * Replaces the final signed PDF with the same file signed through the gov.br signer.
+   * Only the contract creator can do it, once every participant has signed.
+   */
+  @Post(":id/gov-signature")
+  async attachGovSignature(@Req() request: AuthenticatedRequest, @Param("id") id: string, @Body() body: AttachGovSignatureDto) {
+    const userId = request.user?.sub;
+    const uploadedPath = contractFilePath(body.fileUrl);
+    const discardUpload = () => deleteUploadedContractFile(body.fileUrl);
+    const contract = await this.prisma.contract.findUnique({ where: { id } });
+    if (!contract) {
+      await discardUpload();
+      throw new NotFoundException("Contrato nao encontrado.");
+    }
+    if (!userId || contract.createdById !== userId) {
+      await discardUpload();
+      throw new ForbiddenException("Apenas quem criou o contrato pode anexar a assinatura gov.br.");
+    }
+    if (contract.status !== "SIGNED" || !contract.signedFileUrl) {
+      await discardUpload();
+      throw new BadRequestException("A assinatura gov.br so fica disponivel depois que todos assinarem.");
+    }
+    if (contract.govSignedAt) {
+      await discardUpload();
+      throw new BadRequestException("Este contrato ja foi assinado pelo gov.br.");
+    }
+    const previousPath = contractFilePath(contract.signedFileUrl);
+    if (!uploadedPath || !previousPath) {
+      await discardUpload();
+      throw new BadRequestException("Arquivo do contrato invalido.");
+    }
+
+    const [uploaded, previous] = await Promise.all([readFile(uploadedPath), readFile(previousPath)]);
+    const problem = govSignedPdfProblem(uploaded, previous);
+    if (problem) {
+      await discardUpload();
+      throw new BadRequestException(problem);
+    }
+
+    const actor = await this.prisma.user.findUnique({ where: { id: userId }, select: actorSelect });
+    const signedFileUrl = `/uploads/contracts/${basename(uploadedPath)}`;
+    const signedDocumentHash = sha256(uploaded);
+    const govSignedAt = new Date();
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.contractVersion.updateMany({
+        where: { contractId: id, fileUrl: contract.signedFileUrl },
+        data: { fileUrl: signedFileUrl },
+      }),
+      this.prisma.contract.update({
+        where: { id },
+        data: {
+          signedFileUrl,
+          signedDocumentHash,
+          govSignedAt,
+          govSignedById: userId,
+          eventLogs: {
+            create: {
+              eventType: "GOV_SIGNED",
+              actorUserId: userId,
+              actorName: actor?.name,
+              actorEmail: actor?.email,
+              description: `${actor?.name ?? "Alguem"} assinou digitalmente o documento "${contractTitle(contract.title)}" pelo gov.br. O PDF final foi substituido pela versao com assinatura digital (hash ${signedDocumentHash}).`,
+              metadata: {
+                previousDocumentHash: contract.signedDocumentHash,
+                signedDocumentHash,
+              },
+              ipAddress: requestIp(request),
+            },
+          },
+        },
+        include: contractInclude,
+      }),
+    ]);
+    // The gov.br file is an incremental update of the previous PDF, so it already contains it.
+    await deleteUploadedContractFile(contract.signedFileUrl);
+    return updated;
+  }
+
   @Public()
   @Post("validate")
   async validate(@Body() body: ValidateContractDto) {
@@ -494,16 +573,46 @@ function isContractReady(contract: {
 }
 
 async function deleteUploadedContractFile(fileUrl?: string | null) {
-  if (!fileUrl) return;
+  const path = contractFilePath(fileUrl);
+  if (!path) return;
   try {
-    const pathname = fileUrl.startsWith("http") ? new URL(fileUrl).pathname : fileUrl;
-    if (!pathname.startsWith("/uploads/contracts/")) return;
-    const filename = pathname.split("/").pop();
-    if (!filename) return;
-    await unlink(join(process.cwd(), "uploads", "contracts", filename));
+    await unlink(path);
   } catch {
     return;
   }
+}
+
+function contractFilePath(fileUrl?: string | null) {
+  if (!fileUrl) return undefined;
+  try {
+    const pathname = fileUrl.startsWith("http") ? new URL(fileUrl).pathname : fileUrl;
+    if (!pathname.startsWith("/uploads/contracts/")) return undefined;
+    const filename = basename(pathname);
+    return filename ? join(process.cwd(), "uploads", "contracts", filename) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The gov.br signer appends the signature as an incremental update, so a valid file starts
+ * with the exact bytes of the previous PDF and its last signature covers the whole file.
+ */
+function govSignedPdfProblem(uploaded: Buffer, previous: Buffer) {
+  if (uploaded.subarray(0, 5).toString("latin1") !== "%PDF-") return "Envie o PDF assinado pelo gov.br.";
+  if (uploaded.length <= previous.length || !uploaded.subarray(0, previous.length).equals(previous)) {
+    return "O PDF enviado nao corresponde ao contrato final. Assine pelo gov.br exatamente o arquivo baixado do sistema.";
+  }
+  const appended = uploaded.subarray(previous.length).toString("latin1");
+  const hasSignature = /\/Type\s*\/Sig\b/.test(appended) && /\/(adbe\.pkcs7\.detached|ETSI\.CAdES\.detached)/.test(appended);
+  const ranges = [...appended.matchAll(/\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/g)];
+  const last = ranges.at(-1);
+  if (!hasSignature || !last) return "Nenhuma assinatura digital foi encontrada no PDF enviado.";
+  const [start, , offset, length] = last.slice(1).map(Number);
+  if (start !== 0 || offset + length !== uploaded.length) {
+    return "A assinatura digital do PDF nao cobre o documento inteiro.";
+  }
+  return undefined;
 }
 
 async function uploadedContractHash(versions: Array<{ version: number; fileUrl?: string | null }>) {

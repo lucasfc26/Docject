@@ -12,6 +12,15 @@ function errorMessage(error: unknown) {
 }
 
 const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Data is refreshed explicitly by mutations (invalidateQueries); avoid refetching
+      // every screen on each window focus or remount.
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1
+    }
+  },
   queryCache: new QueryCache({
     onError: (error) => toast.error(errorMessage(error))
   }),

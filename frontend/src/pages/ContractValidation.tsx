@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Download, ExternalLink, FileCheck2, ShieldCheck } from "lucide-react";
 import { toast } from "react-toastify";
 import { Button, Panel, StatusBadge } from "../components/ui";
+import { GovSignatureSection } from "../components/GovSignatureSection";
 import { apiAssetUrl, apiValidateContract, downloadApiAsset, sortedContractParticipants, contractParticipantLabel, type ApiContract } from "../services/api";
 
 export function ContractValidation() {
@@ -72,9 +73,14 @@ export function ContractValidation() {
                 <h2 className="mt-2 font-display text-2xl font-semibold">{contract.title}</h2>
                 <p className="mt-2 text-sm text-[color:var(--muted)]">UUID: {contract.id}</p>
               </div>
-              <StatusBadge tone="success">Assinado</StatusBadge>
+              <StatusBadge tone="success">
+                {contract.govSignedAt ? "Assinado · gov.br" : "Assinado"}
+              </StatusBadge>
             </div>
             <div className="mt-6 grid gap-3 text-sm">
+              {contract.govSignedAt ? (
+                <GovSignatureSection contract={contract} onSigned={() => undefined} />
+              ) : null}
               <p className="break-all font-mono text-xs text-[color:var(--muted)]">
                 Hash original: {contract.originalDocumentHash ?? "-"}
               </p>

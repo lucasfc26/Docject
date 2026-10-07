@@ -5,6 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { timeline } from "../data/mock";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
+import { GovSignatureSection } from "../components/GovSignatureSection";
 import { apiAssetUrl, apiGet, apiPost, downloadApiAsset, buildContractSignPayload, contractParticipantLabel, sortedContractParticipants, type ApiClient, type ApiContract, type ApiProject, type ApiService, type ApiServiceHealthCheckResult, type ApiSettings } from "../services/api";
 
 export function ClientPortal() {
@@ -64,7 +65,8 @@ export function ClientPortal() {
     enabled: view === "services" && Boolean(selectedService?.id),
     queryKey: ["service-health", selectedService?.id],
     queryFn: () => apiGet<ApiServiceHealthCheckResult[]>(`/services/${selectedService?.id}/health-checks`),
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
   const selectedProgress = selectedProject ? projectProgress(selectedProject) : 0;
   const projectClient = selectedProject?.client?.name ?? selectedService?.client?.name ?? selectedClient?.name ?? "Cliente";
@@ -564,6 +566,9 @@ function ContractSignatureView({
             </Button>
           </form>
         ) : null}
+        <div className="mt-5">
+          <GovSignatureSection contract={contract} userId={userId} onSigned={onSigned} />
+        </div>
       </Panel>
 
       <Panel className="p-6">

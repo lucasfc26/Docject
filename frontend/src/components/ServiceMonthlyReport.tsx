@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit3, FileText, Printer, RefreshCw, Save, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Edit3, FileText, Printer, RefreshCw, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -49,10 +49,14 @@ export function ServiceMonthlyReport({
   useEffect(() => {
     if (!months.length) return;
     if (!month || !months.some((item) => item.month === month)) {
-      // Default to the last closed month; fall back to the month in progress.
-      setMonth((months.find((item) => item.status === "CLOSED") ?? months[0]).month);
+      // Months come newest first, so the first one is the month in progress.
+      setMonth(months[0].month);
     }
   }, [months, month]);
+  const monthIndex = months.findIndex((item) => item.month === month);
+  const selectedMonth = monthIndex >= 0 ? months[monthIndex] : undefined;
+  const olderMonth = monthIndex >= 0 ? months[monthIndex + 1] : undefined;
+  const newerMonth = monthIndex > 0 ? months[monthIndex - 1] : undefined;
 
   const { data: report, isLoading, error } = useQuery({
     enabled: Boolean(month),
@@ -97,21 +101,39 @@ export function ServiceMonthlyReport({
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <label className="block min-w-[220px]">
+        <div className="min-w-[260px]">
           <span className="mono-label text-[color:var(--muted)]">Relatorio mensal</span>
-          <select
-            className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-            value={month}
-            onChange={(event) => setMonth(event.target.value)}
-          >
-            {months.map((item) => (
-              <option key={item.month} value={item.month}>
-                {formatMonth(item.month)}
-                {item.status === "OPEN" ? " (em apuracao)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+          <div className="mt-2 flex items-center gap-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-1">
+            <Button
+              aria-label="Mes anterior"
+              className="px-3 disabled:cursor-not-allowed disabled:opacity-30"
+              disabled={!olderMonth}
+              title={olderMonth ? formatMonth(olderMonth.month) : undefined}
+              type="button"
+              variant="ghost"
+              onClick={() => olderMonth && setMonth(olderMonth.month)}
+            >
+              <ChevronLeft size={18} />
+            </Button>
+            <div className="min-w-0 flex-1 text-center">
+              <p className="truncate font-semibold">{selectedMonth ? formatMonth(selectedMonth.month) : "-"}</p>
+              {selectedMonth?.status === "OPEN" ? (
+                <p className="text-xs text-[color:var(--muted)]">Em apuracao</p>
+              ) : null}
+            </div>
+            <Button
+              aria-label="Proximo mes"
+              className="px-3 disabled:cursor-not-allowed disabled:opacity-30"
+              disabled={!newerMonth}
+              title={newerMonth ? formatMonth(newerMonth.month) : undefined}
+              type="button"
+              variant="ghost"
+              onClick={() => newerMonth && setMonth(newerMonth.month)}
+            >
+              <ChevronRight size={18} />
+            </Button>
+          </div>
+        </div>
         {report ? (
           <div className="flex flex-wrap gap-2">
             {canEdit && report.status === "CLOSED" ? (

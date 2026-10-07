@@ -264,8 +264,18 @@ async function assertOk(response: Response, fallback: string) {
   }
 }
 
-async function ensureToken() {
-  if (memoryToken) return;
+let pendingToken: Promise<void> | null = null;
+
+// Shared so the queries a screen fires in parallel trigger a single refresh.
+function ensureToken() {
+  if (memoryToken) return Promise.resolve();
+  pendingToken ??= obtainToken().finally(() => {
+    pendingToken = null;
+  });
+  return pendingToken;
+}
+
+async function obtainToken() {
   const refreshToken = localStorage.getItem("projectfy-refresh-token");
   if (refreshToken) {
     const response = await fetch(`${API_URL}/auth/refresh`, {
@@ -517,6 +527,8 @@ export type ApiContract = {
   originalDocumentHash?: string;
   signedDocumentHash?: string;
   signedFileUrl?: string;
+  govSignedAt?: string;
+  govSignedById?: string;
   validationCodeHash?: string;
   sentAt?: string;
   cancelledAt?: string;

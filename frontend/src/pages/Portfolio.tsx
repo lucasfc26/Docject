@@ -28,6 +28,7 @@ import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState 
 import { createPortal } from "react-dom";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
+import { GovSignatureSection } from "../components/GovSignatureSection";
 import { scrollToFocusRow, useFocusFromUrl } from "../hooks/useFocusFromUrl";
 import {
   apiDelete,
@@ -1390,6 +1391,7 @@ export function ContractsPage() {
                             addParticipantMutation.mutate({ id: contract.id, userId, role })
                           }
                           addingParticipant={addParticipantMutation.isPending}
+                          onGovSigned={() => queryClient.invalidateQueries({ queryKey: ["contracts"] })}
                         />
                       </td>
                     </tr>
@@ -1591,11 +1593,13 @@ function ContractSignaturesPanel({
   users,
   onAddParticipant,
   addingParticipant,
+  onGovSigned,
 }: {
   contract: ApiContract;
   users: ApiUser[];
   onAddParticipant: (userId: string, role: "CONTRACTOR" | "WITNESS") => void;
   addingParticipant: boolean;
+  onGovSigned: () => void;
 }) {
   const participants = sortedContractParticipants(contract);
   const logs = contract.signatureLogs ?? [];
@@ -1609,7 +1613,8 @@ function ContractSignaturesPanel({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
-      <div className="grid gap-3">
+      <div className="grid content-start gap-3">
+        <GovSignatureSection contract={contract} userId={readStoredUserId()} onSigned={onGovSigned} />
         <p className="mono-label text-[color:var(--muted)]">Participantes</p>
         {participants.map((participant) => (
           <div

@@ -101,3 +101,8 @@ export class ValidateContractDto {
   @IsString()
   code!: string;
 }
+
+export class AttachGovSignatureDto {
+  @IsString()
+  fileUrl!: string;
+}
