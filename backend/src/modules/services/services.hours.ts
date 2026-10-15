@@ -48,7 +48,7 @@ export function buildServiceHours(service: HoursConfig, logs: WorkLog[], today =
   const expirationMonths = Math.max(0, service.hoursExpirationMonths ?? 0);
 
   const logMonths = logs.map((log) => log.month).filter(isValidMonth).sort();
-  const startMonth = minMonth(monthKey(service.startDate), logMonths[0]);
+  const startMonth = monthKey(service.startDate);
   const endMonth = maxMonth(monthKey(today), logMonths[logMonths.length - 1]);
 
   const logsByMonth = new Map<string, WorkLog[]>();
@@ -124,10 +124,6 @@ function monthDiff(from: string, to: string) {
   const [fromYear, fromMonth] = from.split("-").map(Number);
   const [toYear, toMonth] = to.split("-").map(Number);
   return (toYear - fromYear) * 12 + (toMonth - fromMonth);
-}
-
-function minMonth(base: string, other?: string) {
-  return other && other < base ? other : base;
 }
 
 function maxMonth(base: string, other?: string) {
