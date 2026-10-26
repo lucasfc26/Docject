@@ -17,6 +17,10 @@ export class CreateClientDto {
   cpf?: string;
 
   @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])
   health?: string;
 
@@ -42,6 +46,10 @@ export class UpdateClientDto {
   @IsOptional()
   @IsString()
   cpf?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsOptional()
   @IsIn(["EXCELLENT", "ATTENTION", "STABLE"])

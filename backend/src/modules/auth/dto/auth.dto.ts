@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsString, Matches, MinLength } from "class-validator";
+import { IsEmail, IsIn, IsOptional, IsString, Matches, MinLength } from "class-validator";
 
 export const passwordRuleMessage =
   "A senha deve ter no minimo 6 caracteres e pelo menos um caractere especial.";
@@ -24,6 +24,14 @@ export class RegisterDto {
   @MinLength(6)
   @Matches(passwordSpecialCharacterPattern, { message: passwordRuleMessage })
   password!: string;
+
+  /** Admin accounts are always paid; clients are invited by an admin for free. */
+  @IsIn(["MONTHLY", "YEARLY"])
+  plan!: "MONTHLY" | "YEARLY";
+
+  @IsString()
+  @Matches(/^(\d{11}|\d{14})$/, { message: "Informe um CPF ou CNPJ valido (somente numeros)." })
+  cpfCnpj!: string;
 }
 
 export class RefreshTokenDto {

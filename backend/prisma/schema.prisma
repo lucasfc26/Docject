@@ -46,6 +46,18 @@ enum ContractStatus {
   CANCELLED
 }
 
+enum SubscriptionPlan {
+  MONTHLY
+  YEARLY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PENDING
+  OVERDUE
+  CANCELLED
+}
+
 enum TransactionStatus {
   PENDING
   PAID
@@ -77,6 +89,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   serviceWorkLogs ServiceWorkLog[]
   serviceReports  ServiceMonthlyReport[]
+  subscription    Subscription?
+  asaasCredential AsaasCredential?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
@@ -113,6 +127,8 @@ model Client {
   document  String?
   cpf       String?
   revenue   Decimal         @default(0)
+  email     String?
+  asaasCustomerId String?
   owner     User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   ownerId   String?
   users     User[]          @relation("ClientPortalUsers")
@@ -277,6 +293,12 @@ model FinancialTransaction {
   service   Service?          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
   serviceId String?
   servicePeriod String?
+  asaasPaymentId   String?        @unique
+  asaasBillingType String?
+  asaasInvoiceUrl  String?
+  asaasBankSlipUrl String?
+  asaasPixPayload  String?
+  asaasStatus      String?
   createdAt DateTime          @default(now())
 
   @@unique([serviceId, servicePeriod])
@@ -438,4 +460,37 @@ model Feature {
   role       UserRole @default(ADMIN)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+/** Plano pago do administrador (cobre a equipe dele), cobrado pela conta Asaas do dono do sistema. Clientes nao tem assinatura. */
+model Subscription {
+  id                  String             @id @default(uuid())
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId              String             @unique
+  plan                SubscriptionPlan   @default(MONTHLY)
+  status              SubscriptionStatus @default(PENDING)
+  cpfCnpj             String?
+  asaasCustomerId     String?
+  asaasSubscriptionId String?            @unique
+  asaasPaymentId      String?            @unique
+  checkoutUrl         String?
+  currentPeriodEnd    DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+/** Credenciais Asaas do administrador; segredos ficam cifrados com AES-256-GCM. */
+model AsaasCredential {
+  id                    String   @id @default(uuid())
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId                String   @unique
+  environment           String   @default("PRODUCTION")
+  apiKeyEncrypted       String
+  apiKeyLast4           String
+  webhookTokenEncrypted String?
+  autoCharge            Boolean  @default(false)
+  defaultBillingType    String   @default("PIX")
+  chargeDaysBefore      Int      @default(5)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }

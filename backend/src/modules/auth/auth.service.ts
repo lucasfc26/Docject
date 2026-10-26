@@ -4,6 +4,8 @@ import * as bcrypt from "bcrypt";
 import { createHash, randomBytes, randomInt } from "crypto";
 import { MailService } from "../../common/mail/mail.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { PlanId } from "../subscriptions/subscription.plans";
+import { SubscriptionsService } from "../subscriptions/subscriptions.service";
 
 const passwordResetTtlMs = 60 * 60 * 1000;
 const refreshTokenTtlMs = 1000 * 60 * 60 * 24 * 30;
@@ -16,6 +18,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly mail: MailService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   async login(email: string, password: string) {
@@ -37,7 +40,7 @@ export class AuthService {
     };
   }
 
-  async register(name: string, email: string, password: string) {
+  async register(name: string, email: string, password: string, plan: PlanId, cpfCnpj: string) {
     const normalizedEmail = normalizeEmail(email);
     const existing = await this.prisma.user.findFirst({
       where: { email: { equals: normalizedEmail, mode: "insensitive" } },
@@ -55,12 +58,26 @@ export class AuthService {
     });
 
     const refreshToken = await this.issueRefreshToken(user.id);
+    const subscription = await this.startSubscription(user.id, plan, cpfCnpj);
 
     return {
       accessToken: this.sign(user.id, user.role),
       refreshToken,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      subscription,
     };
+  }
+
+  /** The account is created even if Asaas fails; the admin can retry in Configuracoes > Assinatura. */
+  private async startSubscription(userId: string, plan: PlanId, cpfCnpj: string) {
+    await this.subscriptions.ensure(userId);
+    try {
+      const result = await this.subscriptions.checkout(userId, plan, cpfCnpj);
+      return { plan, checkoutUrl: result.checkoutUrl };
+    } catch (error) {
+      this.logger.warn(`Checkout do plano ${plan} falhou para ${userId}: ${error instanceof Error ? error.message : error}`);
+      return { plan, checkoutUrl: null, error: error instanceof Error ? error.message : "Falha ao gerar cobranca." };
+    }
   }
 
   async refresh(refreshToken: string) {

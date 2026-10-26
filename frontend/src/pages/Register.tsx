@@ -1,11 +1,14 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, Lock, Mail, UserRound } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, FileText, Lock, Mail, UserRound } from "lucide-react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { z } from "zod";
+import { PlanPicker } from "../components/settings/PlanPicker";
 import { Button, Panel } from "../components/ui";
-import { registerUser } from "../services/api";
+import { fetchPlans, registerUser, type ApiPlanId } from "../services/api";
 
 const passwordSpecialCharacterPattern = /[^A-Za-z0-9]/;
 
@@ -20,32 +23,45 @@ const schema = z
         passwordSpecialCharacterPattern,
         "Use pelo menos um caractere especial, como , . ! @ #",
       ),
-    confirmPassword: z.string().min(6, "Confirme sua senha")
+    confirmPassword: z.string().min(6, "Confirme sua senha"),
+    cpfCnpj: z
+      .string()
+      .transform((value) => value.replace(/\D/g, ""))
+      .refine((value) => value.length === 11 || value.length === 14, "Informe um CPF ou CNPJ valido")
   })
   .refine((values) => values.password === values.confirmPassword, {
     message: "As senhas precisam ser iguais",
     path: ["confirmPassword"]
   });
 
-type FormValues = z.infer<typeof schema>;
+type FormInput = z.input<typeof schema>;
+type FormValues = z.output<typeof schema>;
 
 export function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [plan, setPlan] = useState<ApiPlanId>(() =>
+    searchParams.get("plan")?.toUpperCase() === "YEARLY" ? "YEARLY" : "MONTHLY"
+  );
+  const { data: plans = [] } = useQuery({ queryKey: ["plans"], queryFn: fetchPlans, staleTime: Infinity });
   const {
     register,
     handleSubmit,
     formState: { errors }
-  } = useForm<FormValues>({
+  } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: "", email: "", password: "", confirmPassword: "" }
+    defaultValues: { name: "", email: "", password: "", confirmPassword: "", cpfCnpj: "" }
   });
 
   return (
     <div className="grid min-h-screen place-items-center px-4 py-10">
-      <Panel className="w-full max-w-[540px] p-8 md:p-10">
+      <Panel className="w-full max-w-[860px] p-8 md:p-10">
         <div className="mb-8 text-center">
           <img alt="Docject" className="mx-auto mb-5 h-28 w-auto object-contain" src="/DJ LOGO FULL.svg" />
-          <p className="mt-2 text-[color:var(--muted)]">Crie seu acesso ao Docject.</p>
+          <p className="mt-2 text-[color:var(--muted)]">Crie sua conta de administrador no Docject.</p>
+          <p className="mt-1 text-sm text-[color:var(--muted)]">
+            Seus clientes acessam o portal gratuitamente pelo convite que voce envia.
+          </p>
         </div>
 
         <form
@@ -53,9 +69,20 @@ export function Register() {
           onSubmit={handleSubmit(
             async (values) => {
               try {
-                await registerUser(values.name, values.email, values.password);
+                const { subscription } = await registerUser(
+                  values.name,
+                  values.email,
+                  values.password,
+                  plan,
+                  values.cpfCnpj
+                );
                 toast.success("Conta criada com sucesso.");
-                navigate("/dashboard");
+                if (subscription?.checkoutUrl) {
+                  window.open(subscription.checkoutUrl, "_blank", "noopener,noreferrer");
+                } else {
+                  toast.warn(subscription?.error ?? "Nao foi possivel gerar a cobranca agora. Tente novamente em Assinatura.");
+                }
+                navigate("/settings?tab=assinatura");
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Nao foi possivel criar a conta.");
               }
@@ -66,6 +93,15 @@ export function Register() {
             }
           )}
         >
+          {plans.length ? (
+            <div>
+              <span className="mono-label text-[color:var(--muted)]">Plano</span>
+              <div className="mt-2">
+                <PlanPicker plans={plans} value={plan} onChange={setPlan} />
+              </div>
+            </div>
+          ) : null}
+          <div className="grid gap-5 md:grid-cols-2">
           <RegisterField error={errors.name?.message} icon={<UserRound size={18} />} label="Nome">
             <input className="w-full bg-transparent outline-none" {...register("name")} />
           </RegisterField>
@@ -84,9 +120,13 @@ export function Register() {
           <RegisterField error={errors.confirmPassword?.message} icon={<Lock size={18} />} label="Confirmar senha">
             <input className="w-full bg-transparent outline-none" type="password" {...register("confirmPassword")} />
           </RegisterField>
+          <RegisterField error={errors.cpfCnpj?.message} icon={<FileText size={18} />} label="CPF ou CNPJ (para a cobranca)">
+            <input className="w-full bg-transparent outline-none" inputMode="numeric" maxLength={18} {...register("cpfCnpj")} />
+          </RegisterField>
+          </div>
 
           <Button className="w-full py-3 text-base" type="submit">
-            Criar conta
+            Criar conta e ir para o pagamento
             <ArrowRight size={18} />
           </Button>
         </form>

@@ -19,7 +19,7 @@ export class AuthController {
   @Public()
   @Post("register")
   register(@Body() body: RegisterDto) {
-    return this.auth.register(body.name, body.email, body.password);
+    return this.auth.register(body.name, body.email, body.password, body.plan, body.cpfCnpj);
   }
 
   @Public()

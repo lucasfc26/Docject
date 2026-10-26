@@ -6,6 +6,7 @@ import { MailModule } from "./common/mail/mail.module";
 import { JwtAuthGuard } from "./common/jwt-auth.guard";
 import { AuthModule } from "./modules/auth/auth.module";
 import { ActivityModule } from "./modules/activity/activity.module";
+import { BillingModule } from "./modules/billing/billing.module";
 import { AppointmentsModule } from "./modules/appointments/appointments.module";
 import { ClientsModule } from "./modules/clients/clients.module";
 import { ContractsModule } from "./modules/contracts/contracts.module";
@@ -20,6 +21,8 @@ import { ServicesModule } from "./modules/services/services.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { UploadsModule } from "./modules/uploads/uploads.module";
 import { UsersModule } from "./modules/users/users.module";
+import { SubscriptionGuard } from "./modules/subscriptions/subscription.guard";
+import { SubscriptionsModule } from "./modules/subscriptions/subscriptions.module";
 import { SearchModule } from "./modules/search/search.module";
 import { PrismaModule } from "./prisma/prisma.module";
 
@@ -49,8 +52,14 @@ import { PrismaModule } from "./prisma/prisma.module";
     UploadsModule,
     ActivityModule,
     IntegrationsModule,
-    SearchModule
+    SearchModule,
+    SubscriptionsModule,
+    BillingModule
   ],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }]
+  // Order matters: SubscriptionGuard relies on the user set by JwtAuthGuard.
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: SubscriptionGuard }
+  ]
 })
 export class AppModule {}

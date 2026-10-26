@@ -49,6 +49,7 @@ function assertConsent() {
 type LoginResponse = {
   accessToken: string;
   refreshToken: string;
+  subscription?: { plan: ApiPlanId; checkoutUrl: string | null; error?: string };
   user: {
     id: string;
     name: string;
@@ -79,11 +80,13 @@ export async function registerUser(
   name: string,
   email: string,
   password: string,
+  plan: ApiPlanId,
+  cpfCnpj: string,
 ) {
   const response = await fetch(`${API_URL}/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email: normalizeEmail(email), password }),
+    body: JSON.stringify({ name, email: normalizeEmail(email), password, plan, cpfCnpj }),
   });
   await assertOk(response, "Nao foi possivel cadastrar usuario");
   const data = (await response.json()) as LoginResponse;
@@ -164,6 +167,18 @@ export async function apiUploadAttachment(file: File): Promise<ApiFileUpload> {
   return response.json() as Promise<ApiFileUpload>;
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const response = await authFetch(path, jsonRequest("PUT", body));
+  await assertOk(response, `Erro ao salvar registro em ${path}`);
+  return response.json() as Promise<T>;
+}
+
+export async function fetchPlans() {
+  const response = await fetch(`${API_URL}/subscription/plans`);
+  await assertOk(response, "Nao foi possivel carregar os planos");
+  return response.json() as Promise<ApiPlan[]>;
+}
+
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   const response = await authFetch(path, jsonRequest("PATCH", body));
   await assertOk(response, `Erro ao atualizar registro em ${path}`);
@@ -199,10 +214,22 @@ async function authFetch(path: string, init: RequestInit = {}) {
       headers: { ...(init.headers as Record<string, string> | undefined), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
   const sentToken = memoryToken;
-  const response = await send(sentToken);
-  if (response.status !== 401) return response;
-  await renewToken(sentToken);
-  return send(memoryToken);
+  let response = await send(sentToken);
+  if (response.status === 401) {
+    await renewToken(sentToken);
+    response = await send(memoryToken);
+  }
+  if (response.status === 402) redirectToSubscription();
+  return response;
+}
+
+const SUBSCRIPTION_PATH = "/settings?tab=assinatura";
+
+/** Staff accounts whose admin plan is unpaid are sent to the payment screen. */
+function redirectToSubscription() {
+  const { pathname, search } = window.location;
+  if (pathname === "/settings" && new URLSearchParams(search).get("tab") === "assinatura") return;
+  window.location.assign(SUBSCRIPTION_PATH);
 }
 
 export async function apiValidateContract(code: string): Promise<ApiContract> {
@@ -293,6 +320,7 @@ export type ApiClient = {
   health: string;
   document?: string;
   cpf?: string;
+  email?: string;
   revenue: string;
   projects?: unknown[];
   services?: unknown[];
@@ -613,6 +641,12 @@ export type ApiTransaction = {
   };
   serviceId?: string;
   servicePeriod?: string;
+  asaasPaymentId?: string | null;
+  asaasBillingType?: ApiBillingType | null;
+  asaasInvoiceUrl?: string | null;
+  asaasBankSlipUrl?: string | null;
+  asaasPixPayload?: string | null;
+  asaasStatus?: string | null;
   service?: {
     id: string;
     name: string;
@@ -644,3 +678,44 @@ export type ApiSettings = {
   currency: string;
   supportPhone?: string;
 };
+
+/** Paid plans of admin accounts; client accounts are free. */
+export type ApiPlanId = "MONTHLY" | "YEARLY";
+
+export type ApiPlan = {
+  id: ApiPlanId;
+  name: string;
+  price: number;
+  monthlyEquivalent: number;
+  periodMonths: number;
+  description: string;
+};
+
+export type ApiSubscription = {
+  plan: ApiPlanId;
+  status: "ACTIVE" | "PENDING" | "OVERDUE" | "CANCELLED";
+  /** Whether the account may use the system right now (paid period or platform owner). */
+  active: boolean;
+  ownerExempt: boolean;
+  checkoutUrl: string | null;
+  currentPeriodEnd: string | null;
+  hasDocument: boolean;
+  paymentsEnabled: boolean;
+  plans: ApiPlan[];
+};
+
+export type ApiBillingType = "PIX" | "BOLETO" | "UNDEFINED";
+
+export type ApiAsaasCredential =
+  | { configured: false }
+  | {
+      configured: true;
+      environment: "PRODUCTION" | "SANDBOX";
+      apiKeyMasked: string;
+      hasWebhookToken: boolean;
+      webhookUrl: string;
+      autoCharge: boolean;
+      defaultBillingType: ApiBillingType;
+      chargeDaysBefore: number;
+      updatedAt: string;
+    };

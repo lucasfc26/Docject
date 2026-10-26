@@ -45,6 +45,11 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      CREDENTIALS_ENCRYPTION_KEY: ${CREDENTIALS_ENCRYPTION_KEY:-}
+      ASAAS_ENV: ${ASAAS_ENV:-PRODUCTION}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+      PLATFORM_OWNER_EMAILS: ${PLATFORM_OWNER_EMAILS:-}
     volumes:
       - projectfy_uploads:/app/uploads
     depends_on:

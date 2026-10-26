@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  CreditCard,
   Download,
   Edit3,
   ExternalLink,
@@ -16,16 +17,24 @@ import {
   Focus,
   GripVertical,
   KeyRound,
+  Landmark,
   MoreHorizontal,
   Paperclip,
   Plus,
   Save,
   Send,
+  SlidersHorizontal,
   Trash2,
+  UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { Fragment, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
+import { AsaasChargeActions } from "../components/AsaasChargeActions";
+import { BankSettings } from "../components/settings/BankSettings";
+import { SubscriptionSettings } from "../components/settings/SubscriptionSettings";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
 import { GovSignatureSection } from "../components/GovSignatureSection";
@@ -192,6 +201,7 @@ export function ClientsPage() {
         { name: "segment", label: "Segmento" },
         { name: "document", label: "CPF/CNPJ" },
         { name: "cpf", label: "CPF" },
+        { name: "email", label: "E-mail de cobranca" },
         {
           name: "health",
           label: "Saude",
@@ -204,6 +214,7 @@ export function ClientsPage() {
         segment: values.segment || undefined,
         document: values.document || undefined,
         cpf: values.cpf || undefined,
+        email: values.email ? normalizeEmail(values.email) : undefined,
         health: values.health || "STABLE",
       })}
     />
@@ -3378,6 +3389,7 @@ function PaymentOrderCard({
           </Button>
         ) : null}
       </div>
+      <AsaasChargeActions order={order} />
     </div>
   );
 }
@@ -4121,6 +4133,7 @@ export function ResourcesPage() {
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiGet<ApiSettings>("/settings"),
@@ -4129,9 +4142,11 @@ export function SettingsPage() {
     queryKey: ["users"],
     queryFn: () => apiGet<ApiUser[]>("/users"),
   });
+  // Only the team form needs clients; loading them elsewhere fails while the plan is unpaid.
   const { data: clients = [] } = useQuery({
     queryKey: ["clients"],
     queryFn: () => apiGet<ApiClient[]>("/clients"),
+    enabled: searchParams.get("tab") === "equipe",
   });
   const storedUser = useMemo(() => {
     try {
@@ -4282,263 +4297,366 @@ export function SettingsPage() {
     });
   };
 
+  const sections = settingsSections.filter((section) => section.roles.includes(currentRole));
+  const activeSection =
+    sections.find((section) => section.id === searchParams.get("tab")) ?? sections[0];
+  const selectSection = (id: SettingsSectionId) =>
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("tab", id);
+        return next;
+      },
+      { replace: true },
+    );
+
   return (
     <div className="space-y-6">
       <Panel className="p-6">
         <Toolbar
           title="Configuracoes"
-          subtitle="Conta, acesso e preferencias globais."
+          subtitle="Conta, equipe, cobrancas, assinatura e preferencias globais."
         />
-        <form className="mt-6 grid gap-4 md:grid-cols-2" onSubmit={saveUser}>
-          <TextInput
-            label="Nome"
-            required
-            value={userForm.name}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, name: value }))
-            }
-          />
-          <TextInput
-            label="E-mail de login"
-            required
-            type="email"
-            value={userForm.email}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, email: value }))
-            }
-          />
-          <TextInput
-            label="Telefone"
-            value={userForm.phone}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, phone: value }))
-            }
-          />
-          <TextInput
-            label="CPF"
-            value={userForm.cpf}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, cpf: value }))
-            }
-          />
-          <TextArea
-            label="Endereco"
-            value={userForm.address}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, address: value }))
-            }
-          />
-          <TextInput
-            label="Nova senha"
-            type="password"
-            value={userForm.password}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, password: value }))
-            }
-          />
-          <TextInput
-            label="Confirmar senha"
-            type="password"
-            value={userForm.confirmPassword}
-            onChange={(value) =>
-              setUserForm((current) => ({ ...current, confirmPassword: value }))
-            }
-          />
-          {userForm.password &&
-          userForm.password !== userForm.confirmPassword ? (
-            <p className="md:col-span-2 text-sm text-ember-600 dark:text-ember-400">
-              As senhas precisam ser iguais.
-            </p>
-          ) : null}
-          {userForm.password &&
-          (userForm.password.length < 6 ||
-            !passwordSpecialCharacterPattern.test(userForm.password)) ? (
-            <p className="md:col-span-2 text-sm text-ember-600 dark:text-ember-400">
-              {passwordRuleMessage}
-            </p>
-          ) : null}
-          <Button
-            className="md:col-span-2"
-            disabled={
-              userMutation.isPending ||
-              Boolean(
-                userForm.password &&
-                  (userForm.password !== userForm.confirmPassword ||
-                    userForm.password.length < 6 ||
-                    !passwordSpecialCharacterPattern.test(userForm.password)),
-              )
-            }
-            type="submit"
-          >
-            <Save size={17} />
-            Salvar dados do usuario
-          </Button>
-        </form>
       </Panel>
 
-      {canManageUsers ? (
-        <CrudPage<ApiUser>
-          title="Equipe e clientes"
-          subtitle="Usuarios associados a este perfil. A senha e enviada automaticamente por e-mail ao criar ou resetar."
-          queryKey="users"
-          endpoint="/users"
-          filterFn={(row) => row.id !== currentUser?.id}
-          columns={[
-            { key: "name", label: "Nome" },
-            { key: "email", label: "Email" },
-            { key: "cpf", label: "CPF", render: (row) => row.cpf || "-" },
-            {
-              key: "role",
-              label: "Papel",
-              render: (row) =>
-                roleOptions.find((o) => o.value === row.role)?.label ?? row.role,
-            },
-            {
-              key: "client",
-              label: "Cliente",
-              render: (row) => row.client?.name ?? "-",
-            },
-          ]}
-          fields={[
-            { name: "name", label: "Nome", required: true },
-            { name: "email", label: "Email", required: true },
-            { name: "cpf", label: "CPF" },
-            {
-              name: "role",
-              label: "Papel",
-              type: "select",
-              options: assignableRoleOptions,
-            },
-            {
-              name: "clientId",
-              label: "Cliente associado",
-              type: "select",
-              options: clients.map((client) => ({
-                label: client.name,
-                value: client.id,
-              })),
-            },
-          ]}
-          normalize={(values) => ({
-            name: values.name,
-            email: normalizeEmail(values.email),
-            cpf: values.cpf || undefined,
-            role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
-            clientId:
-              values.role === "CLIENT" ? values.clientId || undefined : null,
-          })}
-          rowActions={(row) => (
-            <Button
-              variant="secondary"
-              disabled={resetPasswordMutation.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Enviar uma nova senha aleatoria para ${row.email}?`,
-                  )
-                ) {
-                  resetPasswordMutation.mutate(row.id);
-                }
-              }}
-            >
-              <KeyRound size={16} />
-              Resetar senha
-            </Button>
-          )}
-        />
-      ) : null}
+      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
+        <Panel className="p-2 lg:sticky lg:top-24">
+          <nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Secoes de configuracao">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              const active = section.id === activeSection?.id;
+              return (
+                <button
+                  aria-current={active ? "page" : undefined}
+                  className={`flex shrink-0 items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
+                    active
+                      ? "bg-[color:var(--primary)] text-white dark:bg-[color:var(--warning)] dark:text-zinc-950"
+                      : "text-[color:var(--muted)] hover:bg-[color:var(--panel-strong)] hover:text-[color:var(--text)]"
+                  }`}
+                  key={section.id}
+                  type="button"
+                  onClick={() => selectSection(section.id)}
+                >
+                  <Icon size={18} />
+                  {section.label}
+                </button>
+              );
+            })}
+          </nav>
+        </Panel>
 
-      {canEditPreferences ? <Panel className="p-6">
-        <div>
-          <p className="mono-label text-[color:var(--muted)]">Sistema</p>
-          <h2 className="mt-1 font-display text-2xl font-semibold">
-            Preferencias
-          </h2>
+        <div className="min-w-0">
+          {activeSection?.id === "equipe" ? (
+            <CrudPage<ApiUser>
+              title="Equipe e clientes"
+              subtitle="Usuarios associados a este perfil. A senha e enviada automaticamente por e-mail ao criar ou resetar."
+              queryKey="users"
+              endpoint="/users"
+              filterFn={(row) => row.id !== currentUser?.id}
+              columns={[
+                { key: "name", label: "Nome" },
+                { key: "email", label: "Email" },
+                { key: "cpf", label: "CPF", render: (row) => row.cpf || "-" },
+                {
+                  key: "role",
+                  label: "Papel",
+                  render: (row) =>
+                    roleOptions.find((o) => o.value === row.role)?.label ?? row.role,
+                },
+                {
+                  key: "client",
+                  label: "Cliente",
+                  render: (row) => row.client?.name ?? "-",
+                },
+              ]}
+              fields={[
+                { name: "name", label: "Nome", required: true },
+                { name: "email", label: "Email", required: true },
+                { name: "cpf", label: "CPF" },
+                {
+                  name: "role",
+                  label: "Papel",
+                  type: "select",
+                  options: assignableRoleOptions,
+                },
+                {
+                  name: "clientId",
+                  label: "Cliente associado",
+                  type: "select",
+                  options: clients.map((client) => ({
+                    label: client.name,
+                    value: client.id,
+                  })),
+                },
+              ]}
+              normalize={(values) => ({
+                name: values.name,
+                email: normalizeEmail(values.email),
+                cpf: values.cpf || undefined,
+                role: values.role || assignableRoleOptions[0]?.value || "CLIENT",
+                clientId:
+                  values.role === "CLIENT" ? values.clientId || undefined : null,
+              })}
+              rowActions={(row) => (
+                <Button
+                  variant="secondary"
+                  disabled={resetPasswordMutation.isPending}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Enviar uma nova senha aleatoria para ${row.email}?`,
+                      )
+                    ) {
+                      resetPasswordMutation.mutate(row.id);
+                    }
+                  }}
+                >
+                  <KeyRound size={16} />
+                  Resetar senha
+                </Button>
+              )}
+            />
+          ) : activeSection ? (
+            <Panel className="p-6">
+              <div>
+                <p className="mono-label text-[color:var(--muted)]">Configuracoes</p>
+                <h2 className="mt-1 font-display text-2xl font-semibold">
+                  {activeSection.label}
+                </h2>
+                <p className="mt-1 text-sm text-[color:var(--muted)]">
+                  {activeSection.description}
+                </p>
+              </div>
+              <div className="mt-6">
+                {activeSection.id === "perfil" ? (
+                  <form className="grid gap-4 md:grid-cols-2" onSubmit={saveUser}>
+                    <TextInput
+                      label="Nome"
+                      required
+                      value={userForm.name}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, name: value }))
+                      }
+                    />
+                    <TextInput
+                      label="E-mail de login"
+                      required
+                      type="email"
+                      value={userForm.email}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, email: value }))
+                      }
+                    />
+                    <TextInput
+                      label="Telefone"
+                      value={userForm.phone}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, phone: value }))
+                      }
+                    />
+                    <TextInput
+                      label="CPF"
+                      value={userForm.cpf}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, cpf: value }))
+                      }
+                    />
+                    <TextArea
+                      label="Endereco"
+                      value={userForm.address}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, address: value }))
+                      }
+                    />
+                    <TextInput
+                      label="Nova senha"
+                      type="password"
+                      value={userForm.password}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, password: value }))
+                      }
+                    />
+                    <TextInput
+                      label="Confirmar senha"
+                      type="password"
+                      value={userForm.confirmPassword}
+                      onChange={(value) =>
+                        setUserForm((current) => ({ ...current, confirmPassword: value }))
+                      }
+                    />
+                    {userForm.password &&
+                    userForm.password !== userForm.confirmPassword ? (
+                      <p className="md:col-span-2 text-sm text-ember-600 dark:text-ember-400">
+                        As senhas precisam ser iguais.
+                      </p>
+                    ) : null}
+                    {userForm.password &&
+                    (userForm.password.length < 6 ||
+                      !passwordSpecialCharacterPattern.test(userForm.password)) ? (
+                      <p className="md:col-span-2 text-sm text-ember-600 dark:text-ember-400">
+                        {passwordRuleMessage}
+                      </p>
+                    ) : null}
+                    <Button
+                      className="md:col-span-2"
+                      disabled={
+                        userMutation.isPending ||
+                        Boolean(
+                          userForm.password &&
+                            (userForm.password !== userForm.confirmPassword ||
+                              userForm.password.length < 6 ||
+                              !passwordSpecialCharacterPattern.test(userForm.password)),
+                        )
+                      }
+                      type="submit"
+                    >
+                      <Save size={17} />
+                      Salvar dados do usuario
+                    </Button>
+                  </form>
+                ) : null}
+                {activeSection.id === "banco" ? (
+                  <BankSettings canManage={currentRole === "ADMIN"} />
+                ) : null}
+                {activeSection.id === "assinatura" ? (
+                  <SubscriptionSettings canManage={currentRole === "ADMIN"} />
+                ) : null}
+                {activeSection.id === "preferencias" ? (
+                  <form
+                    className="grid gap-4 md:grid-cols-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      settingsMutation.mutate({
+                        ...settingsForm,
+                        supportPhone: settingsForm.supportPhone || null,
+                      });
+                    }}
+                  >
+                    <TextInput
+                      label="Nome do app"
+                      required
+                      value={settingsForm.appName}
+                      onChange={(value) =>
+                        setSettingsForm((current) => ({
+                          ...current,
+                          appName: value,
+                        }))
+                      }
+                    />
+                    <label className="block">
+                      <span className="mono-label text-[color:var(--muted)]">
+                        Timezone
+                      </span>
+                      <select
+                        className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                        value={settingsForm.timezone}
+                        onChange={(event) =>
+                          setSettingsForm((current) => ({
+                            ...current,
+                            timezone: event.target.value,
+                          }))
+                        }
+                      >
+                        {timezoneOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mono-label text-[color:var(--muted)]">Moeda</span>
+                      <select
+                        className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
+                        value={settingsForm.currency}
+                        onChange={(event) =>
+                          setSettingsForm((current) => ({
+                            ...current,
+                            currency: event.target.value,
+                          }))
+                        }
+                      >
+                        {currencyOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <TextInput
+                      label="WhatsApp de suporte"
+                      value={settingsForm.supportPhone}
+                      onChange={(value) =>
+                        setSettingsForm((current) => ({
+                          ...current,
+                          supportPhone: value,
+                        }))
+                      }
+                    />
+                    <Button
+                      className="md:col-span-2"
+                      disabled={settingsMutation.isPending}
+                      type="submit"
+                    >
+                      <Save size={17} />
+                      {settingsMutation.isPending ? "Salvando..." : "Salvar configuracoes"}
+                    </Button>
+                  </form>
+                ) : null}
+              </div>
+            </Panel>
+          ) : null}
         </div>
-        <form
-          className="mt-6 grid gap-4 md:grid-cols-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            settingsMutation.mutate({
-              ...settingsForm,
-              supportPhone: settingsForm.supportPhone || null,
-            });
-          }}
-        >
-          <TextInput
-            label="Nome do app"
-            required
-            value={settingsForm.appName}
-            onChange={(value) =>
-              setSettingsForm((current) => ({
-                ...current,
-                appName: value,
-              }))
-            }
-          />
-          <label className="block">
-            <span className="mono-label text-[color:var(--muted)]">
-              Timezone
-            </span>
-            <select
-              className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-              value={settingsForm.timezone}
-              onChange={(event) =>
-                setSettingsForm((current) => ({
-                  ...current,
-                  timezone: event.target.value,
-                }))
-              }
-            >
-              {timezoneOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mono-label text-[color:var(--muted)]">Moeda</span>
-            <select
-              className="mt-2 w-full rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 outline-none"
-              value={settingsForm.currency}
-              onChange={(event) =>
-                setSettingsForm((current) => ({
-                  ...current,
-                  currency: event.target.value,
-                }))
-              }
-            >
-              {currencyOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <TextInput
-            label="WhatsApp de suporte"
-            value={settingsForm.supportPhone}
-            onChange={(value) =>
-              setSettingsForm((current) => ({
-                ...current,
-                supportPhone: value,
-              }))
-            }
-          />
-          <Button
-            className="md:col-span-2"
-            disabled={settingsMutation.isPending}
-            type="submit"
-          >
-            <Save size={17} />
-            {settingsMutation.isPending ? "Salvando..." : "Salvar configuracoes"}
-          </Button>
-        </form>
-      </Panel> : null}
+      </div>
     </div>
   );
 }
+
+type SettingsSectionId = "perfil" | "equipe" | "banco" | "assinatura" | "preferencias";
+
+const settingsSections: Array<{
+  id: SettingsSectionId;
+  label: string;
+  description: string;
+  icon: typeof UserRound;
+  roles: string[];
+}> = [
+  {
+    id: "perfil",
+    label: "Perfil",
+    description: "Seus dados de acesso e contato.",
+    icon: UserRound,
+    roles: ["ADMIN", "MANAGER", "FINANCIAL", "CLIENT"],
+  },
+  {
+    id: "equipe",
+    label: "Equipe",
+    description: "Usuarios e clientes associados a esta conta.",
+    icon: Users,
+    roles: ["ADMIN", "MANAGER"],
+  },
+  {
+    id: "banco",
+    label: "Banco",
+    description: "Conta Asaas usada para cobrar seus clientes por Pix e boleto.",
+    icon: Landmark,
+    roles: ["ADMIN", "MANAGER", "FINANCIAL"],
+  },
+  {
+    id: "assinatura",
+    label: "Assinatura",
+    description: "Seu plano no Docject.",
+    icon: CreditCard,
+    roles: ["ADMIN", "MANAGER", "FINANCIAL"],
+  },
+  {
+    id: "preferencias",
+    label: "Preferencias",
+    description: "Nome do app, fuso horario, moeda e suporte.",
+    icon: SlidersHorizontal,
+    roles: ["ADMIN", "MANAGER"],
+  },
+];
 
 function CrudPage<T extends { id: string }>({
   title,
