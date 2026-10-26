@@ -14,6 +14,8 @@ services:
       POSTGRES_USER: projectfy
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: projectfy
+    ports:
+      - "127.0.0.1:5432:5432"
     volumes:
       - projectfy_pgdata:/var/lib/postgresql/data
     healthcheck:
