@@ -14,6 +14,8 @@ import { AppointmentsPage } from "./pages/AppointmentsPage";
 import { ResourcesPage } from "./pages/ResourcesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ClientPortal } from "./pages/ClientPortal";
+import { ClientInvoicesPage } from "./pages/ClientInvoicesPage";
+import { InvoicePage } from "./pages/InvoicePage";
 import { ContractValidation } from "./pages/ContractValidation";
 import { AccessRecovery, ResetPassword } from "./pages/AccessRecovery";
 import { TermosDeUso } from "./pages/TermosDeUso";
@@ -45,6 +47,7 @@ export default function App() {
         <Route path="/privacidade" element={<PoliticaDePrivacidade />} />
         <Route path="/suporte" element={<Suporte />} />
         <Route path="/validar-contrato" element={<ContractValidation />} />
+        <Route path="/invoices/:id" element={<RequireSession><InvoicePage /></RequireSession>} />
         <Route element={<ProtectedLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clients" element={<ClientsPage />} />
@@ -57,6 +60,7 @@ export default function App() {
           <Route path="/resources" element={<ResourcesPage />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/clients/dashboard" element={<ClientPortal />} />
+          <Route path="/client/invoices" element={<ClientInvoicesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/mudar-senha" element={<ResetPassword embedded />} />
         </Route>
@@ -82,6 +86,12 @@ function ProtectedLayout() {
   return <AppLayout />;
 }
 
+/** Signed-in pages rendered without the app shell (e.g. the printable invoice). */
+function RequireSession({ children }: { children: React.ReactNode }) {
+  if (!localStorage.getItem("projectfy-access-token") || !readStoredUser()) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 function readStoredUser() {
   try {
     const raw = localStorage.getItem("projectfy-user");
@@ -95,7 +105,7 @@ const allowedPathsByRole: Record<string, Set<string>> = {
   ADMIN: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
   MANAGER: new Set(["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/appointments", "/agenda", "/resources", "/settings", "/mudar-senha"]),
   FINANCIAL: new Set(["/dashboard", "/services", "/financial", "/settings", "/mudar-senha"]),
-  CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/settings", "/mudar-senha"]),
+  CLIENT: new Set(["/client/dashboard", "/clients/dashboard", "/client/invoices", "/settings", "/mudar-senha"]),
 };
 
 const defaultPathByRole: Record<string, string> = {

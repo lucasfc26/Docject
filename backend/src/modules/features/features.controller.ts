@@ -25,7 +25,7 @@ const featurePathsByRole: Record<string, string[]> = {
   ADMIN: ["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/agenda", "/resources", "/settings"],
   MANAGER: ["/dashboard", "/clients", "/projects", "/services", "/contracts", "/financial", "/agenda", "/resources", "/settings"],
   FINANCIAL: ["/dashboard", "/services", "/financial", "/settings"],
-  CLIENT: ["/client/dashboard", "/settings"]
+  CLIENT: ["/client/dashboard", "/client/invoices", "/settings"]
 };
 
 const fallbackFeatureNames: Record<string, string> = {
@@ -38,5 +38,6 @@ const fallbackFeatureNames: Record<string, string> = {
   "/agenda": "Agenda",
   "/resources": "Recursos",
   "/client/dashboard": "Portal Cliente",
+  "/client/invoices": "Faturas",
   "/settings": "Configuracoes"
 };

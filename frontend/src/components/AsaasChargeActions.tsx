@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Barcode, Copy, ExternalLink, QrCode, RefreshCw, X } from "lucide-react";
+import { Copy, FileText, ReceiptText, RefreshCw, X } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
-import { apiDelete, apiPost, type ApiBillingType, type ApiTransaction } from "../services/api";
+import { apiDelete, apiPost, type ApiTransaction } from "../services/api";
 import { Button } from "./ui";
 
 const asaasStatusLabel: Record<string, string> = {
@@ -16,7 +17,7 @@ const asaasStatusLabel: Record<string, string> = {
 const linkClass =
   "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-3 text-xs font-semibold hover:bg-[color:var(--panel-strong)]";
 
-/** Asaas charge controls for one revenue entry of the financial schedule. */
+/** Invoice controls (boleto + Pix through the admin's Asaas account) for one revenue entry. */
 export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
   const queryClient = useQueryClient();
   const refresh = (saved: ApiTransaction) => {
@@ -25,11 +26,11 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
     );
   };
 
-  const chargeMutation = useMutation({
-    mutationFn: (billingType: ApiBillingType) =>
-      apiPost<ApiTransaction>(`/billing/transactions/${order.id}/charge`, { billingType }),
+  const issueMutation = useMutation({
+    // BOLETO payments carry a Pix QR code too, so the invoice offers both.
+    mutationFn: () => apiPost<ApiTransaction>(`/billing/transactions/${order.id}/charge`, { billingType: "BOLETO" }),
     onSuccess: refresh,
-    meta: { successMessage: "Cobranca emitida no Asaas." },
+    meta: { successMessage: "Fatura emitida com Pix e boleto." },
   });
   const syncMutation = useMutation({
     mutationFn: () => apiPost<ApiTransaction>(`/billing/transactions/${order.id}/sync`, {}),
@@ -38,22 +39,19 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
   const cancelMutation = useMutation({
     mutationFn: () => apiDelete<ApiTransaction>(`/billing/transactions/${order.id}/charge`),
     onSuccess: refresh,
-    meta: { successMessage: "Cobranca cancelada no Asaas." },
+    meta: { successMessage: "Fatura cancelada no Asaas." },
   });
 
   if (order.kind !== "REVENUE" || order.status === "CANCELLED") return null;
-  const busy = chargeMutation.isPending || syncMutation.isPending || cancelMutation.isPending;
+  const busy = issueMutation.isPending || syncMutation.isPending || cancelMutation.isPending;
 
   if (!order.asaasPaymentId) {
     if (order.status === "PAID") return null;
     return (
       <div className="flex flex-wrap items-center gap-2 border-t border-current/10 pt-3 lg:col-span-3">
-        <span className="mono-label opacity-70">Cobrar via Asaas</span>
-        <Button disabled={busy} type="button" variant="secondary" onClick={() => chargeMutation.mutate("PIX")}>
-          <QrCode size={16} /> Pix
-        </Button>
-        <Button disabled={busy} type="button" variant="secondary" onClick={() => chargeMutation.mutate("BOLETO")}>
-          <Barcode size={16} /> Boleto
+        <Button disabled={busy} type="button" variant="secondary" onClick={() => issueMutation.mutate()}>
+          <ReceiptText size={16} />
+          {issueMutation.isPending ? "Emitindo..." : "Gerar fatura (Pix + boleto)"}
         </Button>
       </div>
     );
@@ -62,19 +60,11 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-current/10 pt-3 lg:col-span-3">
       <span className="mono-label opacity-70">
-        Asaas {order.asaasBillingType === "BOLETO" ? "boleto" : order.asaasBillingType === "PIX" ? "Pix" : ""} ·{" "}
-        {asaasStatusLabel[order.asaasStatus ?? ""] ?? order.asaasStatus ?? "Emitida"}
+        Fatura · {asaasStatusLabel[order.asaasStatus ?? ""] ?? order.asaasStatus ?? "Emitida"}
       </span>
-      {order.asaasInvoiceUrl ? (
-        <a className={linkClass} href={order.asaasInvoiceUrl} rel="noopener noreferrer" target="_blank">
-          <ExternalLink size={14} /> Fatura
-        </a>
-      ) : null}
-      {order.asaasBankSlipUrl ? (
-        <a className={linkClass} href={order.asaasBankSlipUrl} rel="noopener noreferrer" target="_blank">
-          <Barcode size={14} /> Boleto PDF
-        </a>
-      ) : null}
+      <Link className={linkClass} to={`/invoices/${order.id}`}>
+        <FileText size={14} /> Ver fatura
+      </Link>
       {order.asaasPixPayload ? (
         <button
           className={linkClass}
@@ -95,10 +85,10 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
           disabled={busy}
           type="button"
           onClick={() => {
-            if (window.confirm("Cancelar esta cobranca no Asaas?")) cancelMutation.mutate();
+            if (window.confirm("Cancelar esta fatura no Asaas?")) cancelMutation.mutate();
           }}
         >
-          <X size={14} /> Cancelar cobranca
+          <X size={14} /> Cancelar fatura
         </button>
       ) : null}
     </div>

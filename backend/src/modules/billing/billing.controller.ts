@@ -16,9 +16,10 @@ export class BillingController {
     private readonly billing: BillingService,
   ) {}
 
+  /** Only the admin manages the Asaas account; managers and financial staff just issue invoices. */
   @Get("credentials")
-  async credential(@Req() request: AuthenticatedRequest) {
-    return this.billing.credential(await this.staffAdminId(request));
+  credential(@Req() request: AuthenticatedRequest) {
+    return this.billing.credential(this.adminOnly(request));
   }
 
   @Put("credentials")

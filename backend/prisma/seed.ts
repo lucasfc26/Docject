@@ -148,6 +148,7 @@ async function main() {
     { name: "Agenda", path: "/agenda", orderIndex: 7, role: UserRole.ADMIN },
     { name: "Recursos", path: "/resources", orderIndex: 8, role: UserRole.ADMIN },
     { name: "Portal Cliente", path: "/client/dashboard", orderIndex: 9, role: UserRole.CLIENT },
+    { name: "Faturas", path: "/client/invoices", orderIndex: 11, role: UserRole.CLIENT },
     { name: "Configuracoes", path: "/settings", orderIndex: 10, role: UserRole.ADMIN }
   ];
 

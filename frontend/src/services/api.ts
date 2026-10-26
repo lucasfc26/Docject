@@ -321,6 +321,13 @@ export type ApiClient = {
   document?: string;
   cpf?: string;
   email?: string;
+  postalCode?: string;
+  address?: string;
+  addressNumber?: string;
+  complement?: string;
+  province?: string;
+  city?: string;
+  state?: string;
   revenue: string;
   projects?: unknown[];
   services?: unknown[];
@@ -719,3 +726,33 @@ export type ApiAsaasCredential =
       chargeDaysBefore: number;
       updatedAt: string;
     };
+
+export type ApiInvoiceKind = "PROJECT_INSTALLMENT" | "SERVICE" | "OTHER";
+
+export type ApiInvoiceSummary = {
+  id: string;
+  number: string;
+  kind: ApiInvoiceKind;
+  description: string;
+  amount: number;
+  dueDate: string | null;
+  status: "PENDING" | "PAID" | "OVERDUE" | "CANCELLED";
+  issued: boolean;
+  issuedAt: string | null;
+  hasPix: boolean;
+  hasBoleto: boolean;
+};
+
+export type ApiInvoice = ApiInvoiceSummary & {
+  line: { title: string; subtitle: string | null; reference: string; period: string };
+  customer: { name: string; document: string | null; address: string | null; contact: string | null } | null;
+  issuer: { name: string; email: string; phone: string | null; document: string | null } | null;
+  pix: { payload: string; qrImage: string | null } | null;
+  boleto: {
+    identificationField: string | null;
+    barCode: string | null;
+    nossoNumero: string | null;
+    url: string | null;
+  } | null;
+  invoiceUrl: string | null;
+};

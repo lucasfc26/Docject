@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Moon,
+  Receipt,
   Settings,
   Sun,
   UserCog,
@@ -346,13 +347,14 @@ const featureIcons: Record<string, ComponentType<{ size?: number }>> = {
   "/agenda": CalendarDays,
   "/resources": UserCog,
   "/client/dashboard": Activity,
+  "/client/invoices": Receipt,
   "/settings": Settings,
 };
 
 function defaultFeaturesForRole(role?: string): ApiFeature[] {
   const paths =
     role === "CLIENT"
-      ? ["/client/dashboard", "/settings"]
+      ? ["/client/dashboard", "/client/invoices", "/settings"]
       : [
           "/dashboard",
           "/clients",
@@ -384,6 +386,7 @@ const featureNames: Record<string, string> = {
   "/agenda": "Agenda",
   "/resources": "Recursos",
   "/client/dashboard": "Portal Cliente",
+  "/client/invoices": "Faturas",
   "/settings": "Configuracoes",
 };
 

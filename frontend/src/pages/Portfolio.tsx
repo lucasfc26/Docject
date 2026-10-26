@@ -202,6 +202,13 @@ export function ClientsPage() {
         { name: "document", label: "CPF/CNPJ" },
         { name: "cpf", label: "CPF" },
         { name: "email", label: "E-mail de cobranca" },
+        { name: "postalCode", label: "CEP" },
+        { name: "address", label: "Endereco (rua)" },
+        { name: "addressNumber", label: "Numero" },
+        { name: "complement", label: "Complemento" },
+        { name: "province", label: "Bairro" },
+        { name: "city", label: "Cidade" },
+        { name: "state", label: "UF" },
         {
           name: "health",
           label: "Saude",
@@ -215,6 +222,13 @@ export function ClientsPage() {
         document: values.document || undefined,
         cpf: values.cpf || undefined,
         email: values.email ? normalizeEmail(values.email) : undefined,
+        postalCode: values.postalCode || undefined,
+        address: values.address || undefined,
+        addressNumber: values.addressNumber || undefined,
+        complement: values.complement || undefined,
+        province: values.province || undefined,
+        city: values.city || undefined,
+        state: values.state ? values.state.toUpperCase() : undefined,
         health: values.health || "STABLE",
       })}
     />
@@ -4516,7 +4530,7 @@ export function SettingsPage() {
                   </form>
                 ) : null}
                 {activeSection.id === "banco" ? (
-                  <BankSettings canManage={currentRole === "ADMIN"} />
+                  <BankSettings />
                 ) : null}
                 {activeSection.id === "assinatura" ? (
                   <SubscriptionSettings canManage={currentRole === "ADMIN"} />
@@ -4640,7 +4654,7 @@ const settingsSections: Array<{
     label: "Banco",
     description: "Conta Asaas usada para cobrar seus clientes por Pix e boleto.",
     icon: Landmark,
-    roles: ["ADMIN", "MANAGER", "FINANCIAL"],
+    roles: ["ADMIN"],
   },
   {
     id: "assinatura",

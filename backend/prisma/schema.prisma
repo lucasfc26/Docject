@@ -128,6 +128,13 @@ model Client {
   cpf       String?
   revenue   Decimal         @default(0)
   email     String?
+  postalCode    String?
+  address       String?
+  addressNumber String?
+  complement    String?
+  province      String?
+  city          String?
+  state         String?
   asaasCustomerId String?
   owner     User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   ownerId   String?
@@ -299,6 +306,13 @@ model FinancialTransaction {
   asaasBankSlipUrl String?
   asaasPixPayload  String?
   asaasStatus      String?
+  asaasInvoiceNumber      String?
+  asaasIdentificationField String?
+  asaasBarCode            String?
+  asaasNossoNumero        String?
+  asaasPixQrImage         String?
+  invoiceDescription      String?
+  invoiceIssuedAt         DateTime?
   createdAt DateTime          @default(now())
 
   @@unique([serviceId, servicePeriod])
@@ -489,7 +503,7 @@ model AsaasCredential {
   apiKeyLast4           String
   webhookTokenEncrypted String?
   autoCharge            Boolean  @default(false)
-  defaultBillingType    String   @default("PIX")
+  defaultBillingType    String   @default("BOLETO")
   chargeDaysBefore      Int      @default(5)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

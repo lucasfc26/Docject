@@ -10,6 +10,21 @@ const BASE_URLS: Record<AsaasEnvironment, string> = {
 
 export type AsaasCustomer = { id: string; name: string; cpfCnpj?: string; email?: string };
 
+export type AsaasCustomerInput = {
+  name: string;
+  cpfCnpj: string;
+  email?: string;
+  phone?: string;
+  postalCode?: string;
+  address?: string;
+  addressNumber?: string;
+  complement?: string;
+  province?: string;
+  externalReference?: string;
+};
+
+export type AsaasIdentificationField = { identificationField: string; nossoNumero?: string; barCode?: string };
+
 export type AsaasPayment = {
   id: string;
   status: string;
@@ -17,6 +32,7 @@ export type AsaasPayment = {
   value: number;
   dueDate: string;
   invoiceUrl?: string;
+  invoiceNumber?: string | null;
   bankSlipUrl?: string | null;
   externalReference?: string | null;
   subscription?: string | null;
@@ -37,8 +53,12 @@ export class AsaasClient {
     return this.request<{ balance: number }>("GET", "/finance/balance");
   }
 
-  createCustomer(data: { name: string; cpfCnpj: string; email?: string; phone?: string; externalReference?: string }) {
+  createCustomer(data: AsaasCustomerInput) {
     return this.request<AsaasCustomer>("POST", "/customers", data);
+  }
+
+  updateCustomer(id: string, data: AsaasCustomerInput) {
+    return this.request<AsaasCustomer>("POST", `/customers/${encodeURIComponent(id)}`, data);
   }
 
   createPayment(data: {
@@ -60,8 +80,14 @@ export class AsaasClient {
     return this.request<{ deleted: boolean }>("DELETE", `/payments/${encodeURIComponent(id)}`);
   }
 
+  /** Available for PIX payments and for BOLETO payments, whose slip also carries a Pix QR code. */
   pixQrCode(paymentId: string) {
     return this.request<AsaasPixQrCode>("GET", `/payments/${encodeURIComponent(paymentId)}/pixQrCode`);
+  }
+
+  /** Boleto "linha digitavel". */
+  identificationField(paymentId: string) {
+    return this.request<AsaasIdentificationField>("GET", `/payments/${encodeURIComponent(paymentId)}/identificationField`);
   }
 
   createSubscription(data: {
