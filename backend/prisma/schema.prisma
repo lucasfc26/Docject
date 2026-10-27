@@ -72,6 +72,8 @@ model User {
   phone         String?
   cpf           String?
   address       String?
+  /** Foto ou logo da empresa, exibida no header e nas faturas emitidas por este admin. */
+  logoUrl       String?
   passwordHash  String
   role          UserRole       @default(MANAGER)
   client        Client?        @relation("ClientPortalUsers", fields: [clientId], references: [id])
@@ -313,9 +315,16 @@ model FinancialTransaction {
   asaasPixQrImage         String?
   invoiceDescription      String?
   invoiceIssuedAt         DateTime?
+  nfseId                  String?
+  nfseStatus              String?
+  nfseNumber              String?
+  nfsePdfUrl              String?
+  nfseXmlUrl              String?
+  nfseError               String?
   createdAt DateTime          @default(now())
 
   @@unique([serviceId, servicePeriod])
+  @@index([nfseId])
 }
 
 model Service {
@@ -505,6 +514,12 @@ model AsaasCredential {
   autoCharge            Boolean  @default(false)
   defaultBillingType    String   @default("BOLETO")
   chargeDaysBefore      Int      @default(5)
+  nfseEnabled           Boolean  @default(false)
+  nfseServiceCode       String?
+  nfseServiceName       String?
+  nfseIssRate           Float    @default(0)
+  nfseRetainIss         Boolean  @default(false)
+  nfseObservations      String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

@@ -33,6 +33,7 @@ import {
 import { Button } from "../components/ui";
 import { GlobalSearch } from "../components/GlobalSearch";
 import { apiGet, apiPatch, logout, type ApiFeature } from "../services/api";
+import { UserAvatar, firstName, profileQueryKey, type CurrentProfile } from "../components/UserAvatar";
 import { useThemeStore } from "../stores/theme";
 
 const titles: Record<string, string> = {
@@ -72,6 +73,11 @@ export function AppLayout() {
     queryKey: ["notifications"],
     queryFn: () => apiGet<HeaderNotification[]>("/notifications"),
   });
+  const { data: profile } = useQuery({
+    queryKey: profileQueryKey,
+    queryFn: () => apiGet<CurrentProfile>("/auth/me"),
+  });
+  const displayName = profile?.name ?? user?.name ?? "Admin";
   const { data: features = [] } = useQuery({
     queryKey: ["features"],
     queryFn: () => apiGet<ApiFeature[]>("/features"),
@@ -192,15 +198,15 @@ export function AppLayout() {
             </Button>
             <Button
               aria-label="Menu do usuario"
-              className="h-11 w-11 px-0 md:h-auto md:w-auto md:px-4"
+              className="h-11 w-11 px-0 md:h-auto md:w-auto md:pl-1.5 md:pr-4"
               variant="secondary"
               onClick={() => {
                 setProfileOpen((current) => !current);
                 setNotificationsOpen(false);
               }}
             >
-              <UserRound size={18} className="md:hidden" />
-              <span className="hidden md:inline">{user?.name ?? "Admin"}</span>
+              <UserAvatar logoUrl={profile?.logoUrl} name={displayName} />
+              <span className="hidden md:inline">{firstName(displayName)}</span>
               <ChevronDown size={16} className="hidden md:block" />
             </Button>
 
@@ -237,11 +243,14 @@ export function AppLayout() {
 
             {profileOpen ? (
               <div className="absolute right-0 top-14 z-40 w-64 rounded-3xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-3 shadow-panel dark:shadow-panel-dark">
-                <div className="border-b border-[color:var(--line)] px-3 py-3">
-                  <p className="font-semibold">{user?.name ?? "Admin"}</p>
-                  <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
-                    {user?.email ?? "admin@projectfy.io"}
-                  </p>
+                <div className="flex items-center gap-3 border-b border-[color:var(--line)] px-3 py-3">
+                  <UserAvatar className="h-10 w-10" logoUrl={profile?.logoUrl} name={displayName} />
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{displayName}</p>
+                    <p className="mt-1 truncate text-xs text-[color:var(--muted)]">
+                      {user?.email ?? "admin@projectfy.io"}
+                    </p>
+                  </div>
                 </div>
                 <button
                   className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-sm font-semibold transition hover:bg-[color:var(--panel-strong)]"

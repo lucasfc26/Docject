@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-const ATTACHMENT_PREFIXES = ["/uploads/attachments/", "/uploads/projects/", "/uploads/services/"];
+const ATTACHMENT_PREFIXES = ["/uploads/attachments/", "/uploads/projects/", "/uploads/services/", "/uploads/logos/"];
 
 export async function deleteUploadedAttachment(fileUrl?: string | null) {
   if (!fileUrl) return;

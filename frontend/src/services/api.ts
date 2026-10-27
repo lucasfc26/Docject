@@ -161,6 +161,12 @@ export async function apiUploadContractPdf(file: File): Promise<ApiFileUpload> {
   return response.json() as Promise<ApiFileUpload>;
 }
 
+export async function apiUploadLogo(file: File): Promise<ApiUser> {
+  const response = await authFetch("/users/me/logo", fileRequest(file));
+  await assertOk(response, "Erro ao enviar a imagem");
+  return response.json() as Promise<ApiUser>;
+}
+
 export async function apiUploadAttachment(file: File): Promise<ApiFileUpload> {
   const response = await authFetch("/uploads/attachments", fileRequest(file));
   await assertOk(response, "Erro ao enviar arquivo ZIP do projeto");
@@ -340,6 +346,7 @@ export type ApiUser = {
   phone?: string;
   cpf?: string;
   address?: string;
+  logoUrl?: string | null;
   role: string;
   clientId?: string;
   adminId?: string;
@@ -654,6 +661,12 @@ export type ApiTransaction = {
   asaasBankSlipUrl?: string | null;
   asaasPixPayload?: string | null;
   asaasStatus?: string | null;
+  nfseId?: string | null;
+  nfseStatus?: string | null;
+  nfseNumber?: string | null;
+  nfsePdfUrl?: string | null;
+  nfseXmlUrl?: string | null;
+  nfseError?: string | null;
   service?: {
     id: string;
     name: string;
@@ -724,6 +737,12 @@ export type ApiAsaasCredential =
       autoCharge: boolean;
       defaultBillingType: ApiBillingType;
       chargeDaysBefore: number;
+      nfseEnabled: boolean;
+      nfseServiceCode: string | null;
+      nfseServiceName: string | null;
+      nfseIssRate: number;
+      nfseRetainIss: boolean;
+      nfseObservations: string | null;
       updatedAt: string;
     };
 
@@ -741,12 +760,14 @@ export type ApiInvoiceSummary = {
   issuedAt: string | null;
   hasPix: boolean;
   hasBoleto: boolean;
+  /** Set once the NFS-e is authorized by the city hall. */
+  nfsePdfUrl: string | null;
 };
 
 export type ApiInvoice = ApiInvoiceSummary & {
   line: { title: string; subtitle: string | null; reference: string; period: string };
   customer: { name: string; document: string | null; address: string | null; contact: string | null } | null;
-  issuer: { name: string; email: string; phone: string | null; document: string | null } | null;
+  issuer: { name: string; email: string; phone: string | null; logoUrl: string | null; document: string | null } | null;
   pix: { payload: string; qrImage: string | null } | null;
   boleto: {
     identificationField: string | null;
@@ -755,4 +776,5 @@ export type ApiInvoice = ApiInvoiceSummary & {
     url: string | null;
   } | null;
   invoiceUrl: string | null;
+  nfse: { status: string | null; number: string | null; pdfUrl: string | null; xmlUrl: string | null } | null;
 };

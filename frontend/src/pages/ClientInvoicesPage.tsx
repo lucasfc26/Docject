@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
+import { FileCheck2, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatDate, formatMoney, invoiceKindLabel, invoiceStatus } from "../components/invoices";
 import { Panel, StatusBadge } from "../components/ui";
@@ -59,7 +59,7 @@ function InvoiceSection({ title, invoices, empty }: { title: string; invoices: A
           const status = invoiceStatus[invoice.status];
           return (
             <div
-              className="grid gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
+              className="grid gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] p-4 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center"
               key={invoice.id}
             >
               <div className="min-w-0">
@@ -71,6 +71,18 @@ function InvoiceSection({ title, invoices, empty }: { title: string; invoices: A
                 <p className="mt-1 text-sm text-[color:var(--muted)]">Vencimento {formatDate(invoice.dueDate)}</p>
               </div>
               <p className="font-display text-xl font-bold">{formatMoney(invoice.amount)}</p>
+              {invoice.nfsePdfUrl ? (
+                <a
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--panel)] px-4 text-sm font-semibold hover:bg-[color:var(--panel-strong)]"
+                  href={invoice.nfsePdfUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  <FileCheck2 size={16} /> Nota fiscal
+                </a>
+              ) : (
+                <span className="hidden md:block" />
+              )}
               {invoice.issued ? (
                 <Link
                   className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full bg-[color:var(--primary)] px-4 text-sm font-semibold text-white hover:opacity-90 dark:bg-[color:var(--warning)] dark:text-zinc-950"

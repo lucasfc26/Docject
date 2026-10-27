@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import {
   AsaasBillingType,
   AsaasClient,
+  AsaasFiscalInvoice,
   AsaasPayment,
   PAID_PAYMENT_STATUSES,
   asaasDueDate,
@@ -67,7 +68,16 @@ export class BillingService {
       autoCharge: body.autoCharge,
       defaultBillingType: body.defaultBillingType,
       chargeDaysBefore: body.chargeDaysBefore,
+      nfseEnabled: body.nfseEnabled,
+      nfseServiceCode: body.nfseServiceCode?.trim() || null,
+      nfseServiceName: body.nfseServiceName?.trim() || null,
+      nfseIssRate: body.nfseIssRate,
+      nfseRetainIss: body.nfseRetainIss,
+      nfseObservations: body.nfseObservations?.trim() || null,
     };
+    if (data.nfseEnabled && (!data.nfseServiceCode || !data.nfseServiceName)) {
+      throw new BadRequestException("Informe o codigo e o nome do servico municipal para emitir notas fiscais.");
+    }
     const saved = await this.prisma.asaasCredential.upsert({
       where: { userId: adminId },
       update: data,
@@ -124,15 +134,51 @@ export class BillingService {
     const credential = await this.requireCredential(adminId);
     const transaction = await this.ownedTransaction(adminId, transactionId);
     if (!transaction.asaasPaymentId) return transaction;
-    const payment = await this.client(credential).getPayment(transaction.asaasPaymentId);
-    return this.applyPayment(transaction.id, payment);
+    const asaas = this.client(credential);
+    if (transaction.nfseId) {
+      const fiscal = await asaas.getFiscalInvoice(transaction.nfseId).catch(() => null);
+      if (fiscal) await this.applyFiscalInvoice(transaction.id, fiscal);
+    }
+    const payment = await asaas.getPayment(transaction.asaasPaymentId);
+    return this.applyPayment(credential, transaction.id, payment);
   }
 
-  /** Webhook of an admin's own Asaas account. */
-  async handleWebhook(credentialId: string, token: unknown, event: string | undefined, payment?: AsaasPayment) {
+  /** Issues (or retries) the NFS-e of a paid entry by hand. */
+  async emitNfse(adminId: string, transactionId: string) {
+    const credential = await this.requireCredential(adminId);
+    if (!credential.nfseEnabled) {
+      throw new BadRequestException("Ative a emissao de notas fiscais em Configuracoes > Banco.");
+    }
+    const transaction = await this.ownedTransaction(adminId, transactionId);
+    if (transaction.status !== "PAID") throw new BadRequestException("A nota fiscal e emitida apos o pagamento.");
+    await this.issueNfse(credential, transaction.id, true);
+    return this.prisma.financialTransaction.findUniqueOrThrow({ where: { id: transaction.id } });
+  }
+
+  /** Webhook of an admin's own Asaas account: payment events and NFS-e events. */
+  async handleWebhook(
+    credentialId: string,
+    token: unknown,
+    body: { event?: string; payment?: AsaasPayment; invoice?: AsaasFiscalInvoice },
+  ) {
     const credential = await this.prisma.asaasCredential.findUnique({ where: { id: credentialId } });
     const expected = credential?.webhookTokenEncrypted ? decryptSecret(credential.webhookTokenEncrypted) : null;
     if (!credential || !webhookTokenMatches(token, expected)) throw new ForbiddenException();
+    const { event, payment, invoice } = body;
+
+    if (event?.startsWith("INVOICE_") && invoice?.id) {
+      const target = await this.prisma.financialTransaction.findFirst({
+        where: {
+          OR: [{ nfseId: invoice.id }, ...(invoice.externalReference ? [{ id: invoice.externalReference }] : [])],
+        },
+        include: transactionInclude,
+      });
+      const targetOwner = target ? transactionOwnerId(target) : null;
+      if (!target || (targetOwner && targetOwner !== credential.userId)) return { ok: true, ignored: true };
+      await this.applyFiscalInvoice(target.id, invoice);
+      return { ok: true };
+    }
+
     if (!event || !payment?.id) return { ok: true, ignored: true };
 
     const transaction = await this.prisma.financialTransaction.findUnique({
@@ -145,7 +191,7 @@ export class BillingService {
     if (event === "PAYMENT_DELETED") {
       await this.prisma.financialTransaction.update({ where: { id: transaction.id }, data: clearedCharge });
     } else {
-      await this.applyPayment(transaction.id, payment);
+      await this.applyPayment(credential, transaction.id, payment);
     }
     return { ok: true };
   }
@@ -290,7 +336,7 @@ export class BillingService {
     const owner = ownerId
       ? await this.prisma.user.findUnique({
           where: { id: ownerId },
-          select: { name: true, email: true, phone: true, cpf: true, subscription: { select: { cpfCnpj: true } } },
+          select: { name: true, email: true, phone: true, cpf: true, logoUrl: true, subscription: { select: { cpfCnpj: true } } },
         })
       : null;
 
@@ -311,6 +357,7 @@ export class BillingService {
             name: owner.name,
             email: owner.email,
             phone: owner.phone,
+            logoUrl: owner.logoUrl,
             document: onlyDigits(owner.subscription?.cpfCnpj) || onlyDigits(owner.cpf) || null,
           }
         : null,
@@ -327,6 +374,14 @@ export class BillingService {
             }
           : null,
       invoiceUrl: transaction.asaasInvoiceUrl,
+      nfse: transaction.nfseId
+        ? {
+            status: transaction.nfseStatus,
+            number: transaction.nfseNumber,
+            pdfUrl: transaction.nfsePdfUrl,
+            xmlUrl: transaction.nfseXmlUrl,
+          }
+        : null,
     };
   }
 
@@ -343,6 +398,7 @@ export class BillingService {
       issuedAt: transaction.invoiceIssuedAt,
       hasPix: Boolean(transaction.asaasPixPayload),
       hasBoleto: Boolean(transaction.asaasIdentificationField || transaction.asaasBankSlipUrl),
+      nfsePdfUrl: transaction.nfseStatus === "AUTHORIZED" ? transaction.nfsePdfUrl : null,
     };
   }
 
@@ -371,19 +427,80 @@ export class BillingService {
     });
   }
 
-  private applyPayment(transactionId: string, payment: AsaasPayment) {
+  private async applyPayment(credential: AsaasCredential, transactionId: string, payment: AsaasPayment) {
     const status = PAID_PAYMENT_STATUSES.has(payment.status)
       ? "PAID"
       : payment.status === "OVERDUE"
         ? "OVERDUE"
         : undefined;
-    return this.prisma.financialTransaction.update({
+    const saved = await this.prisma.financialTransaction.update({
       where: { id: transactionId },
       data: {
         status,
         asaasStatus: payment.status,
         asaasInvoiceUrl: payment.invoiceUrl ?? undefined,
         asaasBankSlipUrl: payment.bankSlipUrl ?? undefined,
+      },
+    });
+    if (status === "PAID" && credential.nfseEnabled && !saved.nfseId) {
+      await this.issueNfse(credential, saved.id, false);
+      return this.prisma.financialTransaction.findUniqueOrThrow({ where: { id: saved.id } });
+    }
+    return saved;
+  }
+
+  /**
+   * Schedules the NFS-e of a paid charge for today. Failures are stored on the entry (and
+   * shown in the UI) instead of thrown, so the Asaas webhook queue never stalls.
+   */
+  private async issueNfse(credential: AsaasCredential, transactionId: string, rethrow: boolean) {
+    const transaction = await this.prisma.financialTransaction.findUniqueOrThrow({
+      where: { id: transactionId },
+      include: transactionInclude,
+    });
+    if (transaction.nfseId && transaction.nfseStatus !== "ERROR" && transaction.nfseStatus !== "CANCELED") return;
+    try {
+      if (!transaction.asaasPaymentId) {
+        throw new BadRequestException("A nota fiscal so pode ser emitida para cobrancas feitas pelo Asaas.");
+      }
+      if (!credential.nfseServiceCode || !credential.nfseServiceName) {
+        throw new BadRequestException("Configure o servico municipal em Configuracoes > Banco.");
+      }
+      const description = transaction.invoiceDescription ?? invoiceDescription(transaction);
+      const fiscal = await this.client(credential).createFiscalInvoice({
+        payment: transaction.asaasPaymentId,
+        serviceDescription: description,
+        observations: credential.nfseObservations || description,
+        value: Math.abs(Number(transaction.amount)),
+        deductions: 0,
+        effectiveDate: asaasDueDate(),
+        municipalServiceCode: credential.nfseServiceCode,
+        municipalServiceName: credential.nfseServiceName,
+        externalReference: transaction.id,
+        taxes: { retainIss: credential.nfseRetainIss, iss: credential.nfseIssRate, cofins: 0, csll: 0, inss: 0, ir: 0, pis: 0 },
+      });
+      await this.applyFiscalInvoice(transaction.id, fiscal);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Falha ao emitir a nota fiscal.";
+      this.logger.warn(`NFS-e falhou para ${transaction.id}: ${message}`);
+      await this.prisma.financialTransaction.update({
+        where: { id: transaction.id },
+        data: { nfseStatus: "ERROR", nfseError: message },
+      });
+      if (rethrow) throw error;
+    }
+  }
+
+  private applyFiscalInvoice(transactionId: string, fiscal: AsaasFiscalInvoice) {
+    return this.prisma.financialTransaction.update({
+      where: { id: transactionId },
+      data: {
+        nfseId: fiscal.id,
+        nfseStatus: fiscal.status,
+        nfseNumber: fiscal.number ?? undefined,
+        nfsePdfUrl: fiscal.pdfUrl ?? undefined,
+        nfseXmlUrl: fiscal.xmlUrl ?? undefined,
+        nfseError: fiscal.status === "ERROR" ? fiscal.statusDescription ?? "Erro na emissao da nota fiscal." : null,
       },
     });
   }
@@ -422,6 +539,12 @@ export class BillingService {
       autoCharge: credential.autoCharge,
       defaultBillingType: credential.defaultBillingType,
       chargeDaysBefore: credential.chargeDaysBefore,
+      nfseEnabled: credential.nfseEnabled,
+      nfseServiceCode: credential.nfseServiceCode,
+      nfseServiceName: credential.nfseServiceName,
+      nfseIssRate: credential.nfseIssRate,
+      nfseRetainIss: credential.nfseRetainIss,
+      nfseObservations: credential.nfseObservations,
       updatedAt: credential.updatedAt,
     };
   }

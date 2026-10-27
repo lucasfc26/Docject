@@ -40,7 +40,19 @@ export type AsaasPayment = {
 
 export type AsaasSubscription = { id: string; status: string; nextDueDate: string };
 
-export type AsaasPixQrCode = { encodedImage: string; payload: string; expirationDate?: string };
+/** NFS-e (nota fiscal de servico) issued by Asaas on behalf of the account. */
+export type AsaasFiscalInvoice = {
+  id: string;
+  status: string;
+  number?: string | null;
+  pdfUrl?: string | null;
+  xmlUrl?: string | null;
+  statusDescription?: string | null;
+  payment?: string | null;
+  externalReference?: string | null;
+};
+
+export type AsaasPixQrCode ={ encodedImage: string; payload: string; expirationDate?: string };
 
 /** Minimal Asaas v3 REST client; one instance per API key. */
 export class AsaasClient {
@@ -88,6 +100,26 @@ export class AsaasClient {
   /** Boleto "linha digitavel". */
   identificationField(paymentId: string) {
     return this.request<AsaasIdentificationField>("GET", `/payments/${encodeURIComponent(paymentId)}/identificationField`);
+  }
+
+  /** Schedules an NFS-e; Asaas sends it to the city hall on effectiveDate. */
+  createFiscalInvoice(data: {
+    payment: string;
+    serviceDescription: string;
+    observations: string;
+    value: number;
+    deductions: number;
+    effectiveDate: string;
+    municipalServiceCode: string;
+    municipalServiceName: string;
+    externalReference?: string;
+    taxes: { retainIss: boolean; iss: number; cofins: number; csll: number; inss: number; ir: number; pis: number };
+  }) {
+    return this.request<AsaasFiscalInvoice>("POST", "/invoices", data);
+  }
+
+  getFiscalInvoice(id: string) {
+    return this.request<AsaasFiscalInvoice>("GET", `/invoices/${encodeURIComponent(id)}`);
   }
 
   createSubscription(data: {

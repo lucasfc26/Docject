@@ -9,14 +9,27 @@ import {
   Patch,
   Post,
   Req,
+  UnauthorizedException,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiTags } from "@nestjs/swagger";
+import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { diskStorage } from "multer";
 import { AuthenticatedRequest } from "../../common/current-user";
 import { MailService } from "../../common/mail/mail.service";
 import { generateRandomPassword } from "../../common/password.util";
+import { deleteUploadedAttachment } from "../../common/uploaded-file";
 import * as bcrypt from "bcrypt";
 import { PrismaService } from "../../prisma/prisma.service";
 import { CreateUserDto, UpdateUserDto } from "./dto/user.dto";
+
+const logoUploadDir = join(process.cwd(), "uploads", "logos");
+// SVG is left out on purpose: it can carry scripts and is served from the app origin.
+const logoExtensions: Record<string, string> = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp" };
 
 @ApiTags("users")
 @Controller("users")
@@ -140,6 +153,53 @@ export class UsersController {
     return { ok: true, email: user.email };
   }
 
+  /** Photo or company logo of the logged user, shown in the header and on issued invoices. */
+  @Post("me/logo")
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: (_request, _file, callback) => {
+          mkdirSync(logoUploadDir, { recursive: true });
+          callback(null, logoUploadDir);
+        },
+        filename: (_request, file, callback) => {
+          callback(null, `${randomUUID()}${logoExtensions[file.mimetype] ?? ".png"}`);
+        },
+      }),
+      fileFilter: (_request, file, callback) => {
+        if (!logoExtensions[file.mimetype]) {
+          callback(new BadRequestException("Envie uma imagem PNG, JPG ou WEBP."), false);
+          return;
+        }
+        callback(null, true);
+      },
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  async uploadLogo(@Req() request: AuthenticatedRequest, @UploadedFile() file?: { filename: string }) {
+    const userId = request.user?.sub;
+    if (!userId) throw new UnauthorizedException();
+    if (!file) throw new BadRequestException("Imagem obrigatoria.");
+    const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { logoUrl: true } });
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { logoUrl: `/uploads/logos/${file.filename}` },
+      select: userSelect,
+    });
+    await deleteUploadedAttachment(current?.logoUrl);
+    return user;
+  }
+
+  @Delete("me/logo")
+  async removeLogo(@Req() request: AuthenticatedRequest) {
+    const userId = request.user?.sub;
+    if (!userId) throw new UnauthorizedException();
+    const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { logoUrl: true } });
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { logoUrl: null }, select: userSelect });
+    await deleteUploadedAttachment(current?.logoUrl);
+    return user;
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     return this.prisma.user.delete({ where: { id }, select: { id: true } });
@@ -183,6 +243,7 @@ const userSelect = {
   phone: true,
   cpf: true,
   address: true,
+  logoUrl: true,
   role: true,
   clientId: true,
   adminId: true,

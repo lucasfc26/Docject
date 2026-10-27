@@ -29,6 +29,12 @@ type BankForm = {
   autoCharge: boolean;
   defaultBillingType: ApiBillingType;
   chargeDaysBefore: string;
+  nfseEnabled: boolean;
+  nfseServiceCode: string;
+  nfseServiceName: string;
+  nfseIssRate: string;
+  nfseRetainIss: boolean;
+  nfseObservations: string;
 };
 
 const emptyForm: BankForm = {
@@ -38,6 +44,12 @@ const emptyForm: BankForm = {
   autoCharge: false,
   defaultBillingType: "BOLETO",
   chargeDaysBefore: "5",
+  nfseEnabled: false,
+  nfseServiceCode: "",
+  nfseServiceName: "",
+  nfseIssRate: "0",
+  nfseRetainIss: false,
+  nfseObservations: "",
 };
 
 /** Rendered only for admins: managers and financial staff cannot change the Asaas account. */
@@ -61,6 +73,12 @@ export function BankSettings() {
             autoCharge: credential.autoCharge,
             defaultBillingType: credential.defaultBillingType,
             chargeDaysBefore: String(credential.chargeDaysBefore),
+            nfseEnabled: credential.nfseEnabled,
+            nfseServiceCode: credential.nfseServiceCode ?? "",
+            nfseServiceName: credential.nfseServiceName ?? "",
+            nfseIssRate: String(credential.nfseIssRate ?? 0),
+            nfseRetainIss: credential.nfseRetainIss,
+            nfseObservations: credential.nfseObservations ?? "",
           }
         : emptyForm,
     );
@@ -76,6 +94,12 @@ export function BankSettings() {
         autoCharge: form.autoCharge,
         defaultBillingType: form.defaultBillingType,
         chargeDaysBefore: Number(form.chargeDaysBefore || 0),
+        nfseEnabled: form.nfseEnabled,
+        nfseServiceCode: form.nfseServiceCode,
+        nfseServiceName: form.nfseServiceName,
+        nfseIssRate: Number(form.nfseIssRate.replace(",", ".") || 0),
+        nfseRetainIss: form.nfseRetainIss,
+        nfseObservations: form.nfseObservations,
       }),
     onSuccess: (saved) => queryClient.setQueryData(["billing-credentials"], saved),
     meta: { successMessage: "Conta Asaas validada e salva com criptografia." },
@@ -199,6 +223,80 @@ export function BankSettings() {
             onChange={(event) => setForm((current) => ({ ...current, chargeDaysBefore: event.target.value }))}
           />
         </label>
+
+        <div className="space-y-4 rounded-2xl border border-[color:var(--line)] p-4 md:col-span-2">
+          <label className="flex items-start gap-3">
+            <input
+              checked={form.nfseEnabled}
+              className="mt-1 h-4 w-4"
+              type="checkbox"
+              onChange={(event) => setForm((current) => ({ ...current, nfseEnabled: event.target.checked }))}
+            />
+            <span className="text-sm">
+              <span className="font-semibold">Emitir nota fiscal (NFS-e) automaticamente apos o pagamento</span>
+              <span className="block text-[color:var(--muted)]">
+                Antes, configure no painel do Asaas em Notas Fiscais &gt; Configuracoes: inscricao municipal, regime
+                tributario e o certificado digital A1. A nota fica anexada a fatura para voce e para o cliente.
+              </span>
+            </span>
+          </label>
+          {form.nfseEnabled ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">Codigo do servico municipal</span>
+                <input
+                  className={fieldClass}
+                  placeholder="Ex.: 01.07"
+                  required
+                  value={form.nfseServiceCode}
+                  onChange={(event) => setForm((current) => ({ ...current, nfseServiceCode: event.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">Nome do servico municipal</span>
+                <input
+                  className={fieldClass}
+                  placeholder="Ex.: Suporte tecnico em informatica"
+                  required
+                  value={form.nfseServiceName}
+                  onChange={(event) => setForm((current) => ({ ...current, nfseServiceName: event.target.value }))}
+                />
+              </label>
+              <label className="block">
+                <span className="mono-label text-[color:var(--muted)]">Aliquota de ISS (%)</span>
+                <input
+                  className={fieldClass}
+                  inputMode="decimal"
+                  value={form.nfseIssRate}
+                  onChange={(event) => setForm((current) => ({ ...current, nfseIssRate: event.target.value }))}
+                />
+              </label>
+              <label className="flex items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--panel-strong)] px-4 py-3 md:mt-7">
+                <input
+                  checked={form.nfseRetainIss}
+                  className="h-4 w-4"
+                  type="checkbox"
+                  onChange={(event) => setForm((current) => ({ ...current, nfseRetainIss: event.target.checked }))}
+                />
+                <span className="text-sm">ISS retido pelo tomador (cliente)</span>
+              </label>
+              <label className="block md:col-span-2">
+                <span className="mono-label text-[color:var(--muted)]">Observacoes da nota (opcional)</span>
+                <textarea
+                  className={`${fieldClass} min-h-20 resize-none`}
+                  placeholder="Se vazio, usa a descricao da fatura."
+                  value={form.nfseObservations}
+                  onChange={(event) => setForm((current) => ({ ...current, nfseObservations: event.target.value }))}
+                />
+              </label>
+              <p className="text-xs text-[color:var(--muted)] md:col-span-2">
+                O codigo e o nome do servico seguem a lista da sua prefeitura (o Asaas mostra a lista em Notas Fiscais). Na
+                duvida, confirme com seu contador.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap gap-2 md:col-span-2">
           <Button disabled={saveMutation.isPending} type="submit">
             <Save size={17} />

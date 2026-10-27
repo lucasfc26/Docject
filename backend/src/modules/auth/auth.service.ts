@@ -203,7 +203,9 @@ export class AuthService {
 
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    return user ? { id: user.id, name: user.name, email: user.email, role: user.role, clientId: user.clientId } : null;
+    return user
+      ? { id: user.id, name: user.name, email: user.email, role: user.role, clientId: user.clientId, logoUrl: user.logoUrl }
+      : null;
   }
 
   private sign(sub: string, role: string) {

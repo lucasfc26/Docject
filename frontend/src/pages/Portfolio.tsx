@@ -34,6 +34,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { AsaasChargeActions } from "../components/AsaasChargeActions";
 import { BankSettings } from "../components/settings/BankSettings";
+import { LogoUploader } from "../components/settings/LogoUploader";
 import { SubscriptionSettings } from "../components/settings/SubscriptionSettings";
 import { Button, Panel, StatusBadge } from "../components/ui";
 import { ServiceMonthlyReport } from "../components/ServiceMonthlyReport";
@@ -3338,6 +3339,14 @@ export function FinancialPage() {
                 </Button>
               </div>
             </form>
+            {editingPayment ? (
+              // Paid entries only show up here, so the invoice and NFS-e controls live in the modal too.
+              <div className="mt-5">
+                <AsaasChargeActions
+                  order={transactions.find((item) => item.id === editingPayment.id) ?? editingPayment}
+                />
+              </div>
+            ) : null}
           </Panel>
         </div>
       </ModalOverlay>
@@ -4442,6 +4451,7 @@ export function SettingsPage() {
                 </p>
               </div>
               <div className="mt-6">
+                {activeSection.id === "perfil" ? <LogoUploader /> : null}
                 {activeSection.id === "perfil" ? (
                   <form className="grid gap-4 md:grid-cols-2" onSubmit={saveUser}>
                     <TextInput
@@ -4644,7 +4654,7 @@ const settingsSections: Array<{
   },
   {
     id: "equipe",
-    label: "Equipe",
+    label: "Equipe e Clientes",
     description: "Usuarios e clientes associados a esta conta.",
     icon: Users,
     roles: ["ADMIN", "MANAGER"],

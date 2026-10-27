@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, ForbiddenException, Get, Headers, Param, Post, Put, Req, UnauthorizedException } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { AsaasPayment } from "../../common/asaas/asaas.client";
+import { AsaasFiscalInvoice, AsaasPayment } from "../../common/asaas/asaas.client";
 import { AuthenticatedRequest } from "../../common/current-user";
 import { Public } from "../../common/public.decorator";
 import { resolveResponsibleAdminId } from "../../common/responsible-admin";
@@ -52,6 +52,11 @@ export class BillingController {
     return this.billing.syncCharge(await this.staffAdminId(request), id);
   }
 
+  @Post("transactions/:id/nfse")
+  async emitNfse(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
+    return this.billing.emitNfse(await this.staffAdminId(request), id);
+  }
+
   @Delete("transactions/:id/charge")
   async cancel(@Req() request: AuthenticatedRequest, @Param("id") id: string) {
     return this.billing.cancelCharge(await this.staffAdminId(request), id);
@@ -62,9 +67,9 @@ export class BillingController {
   webhook(
     @Param("credentialId") credentialId: string,
     @Headers("asaas-access-token") token: string | undefined,
-    @Body() body: { event?: string; payment?: AsaasPayment },
+    @Body() body: { event?: string; payment?: AsaasPayment; invoice?: AsaasFiscalInvoice },
   ) {
-    return this.billing.handleWebhook(credentialId, token, body.event, body.payment);
+    return this.billing.handleWebhook(credentialId, token, body);
   }
 
   private adminOnly(request: AuthenticatedRequest) {

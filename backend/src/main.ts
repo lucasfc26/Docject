@@ -11,7 +11,8 @@ async function bootstrap() {
   app.set("trust proxy", true);
   app.setGlobalPrefix("api");
   app.useStaticAssets(join(process.cwd(), "uploads"), { prefix: "/uploads/" });
-  app.use(helmet());
+  // Uploaded logos are shown as <img> by the frontend, which runs on another port in development.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: "same-site" } }));
   app.enableCors({ origin: true, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

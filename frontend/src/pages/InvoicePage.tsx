@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Copy, ExternalLink, Printer } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, FileCheck2, Printer } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { BoletoBarcode } from "../components/BoletoBarcode";
 import { formatDate, formatDocument, formatMoney, invoiceStatus } from "../components/invoices";
 import { Button } from "../components/ui";
-import { apiGet, type ApiInvoice } from "../services/api";
+import { apiAssetUrl, apiGet, type ApiInvoice } from "../services/api";
 
 const NAVY = "#172540";
 const TEAL = "#2a8c82";
@@ -68,13 +68,22 @@ function InvoiceDocument({ invoice, onCopy }: { invoice: ApiInvoice; onCopy: (va
       {/* Page 1 */}
       <div className="p-6 md:p-10 print:p-8">
         <header className="flex flex-wrap items-start justify-between gap-6 px-6 py-7 text-white md:px-8" style={{ background: NAVY }}>
-          <div>
-            <h1 className="text-2xl font-bold uppercase tracking-tight md:text-3xl">{issuerName}</h1>
-            <p className="mt-3 text-xs text-white/80">
-              {[invoice.issuer?.document ? `CPF/CNPJ: ${formatDocument(invoice.issuer.document)}` : null, invoice.issuer?.email]
-                .filter(Boolean)
-                .join(" • ")}
-            </p>
+          <div className="flex items-center gap-4">
+            {invoice.issuer?.logoUrl ? (
+              <img
+                alt={issuerName}
+                className="h-16 w-16 shrink-0 rounded-xl bg-white object-contain p-1 md:h-20 md:w-20"
+                src={apiAssetUrl(invoice.issuer.logoUrl)}
+              />
+            ) : null}
+            <div>
+              <h1 className="text-2xl font-bold uppercase tracking-tight md:text-3xl">{issuerName}</h1>
+              <p className="mt-3 text-xs text-white/80">
+                {[invoice.issuer?.document ? `CPF/CNPJ: ${formatDocument(invoice.issuer.document)}` : null, invoice.issuer?.email]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-3xl font-bold tracking-wide md:text-4xl">FATURA</p>
@@ -241,6 +250,8 @@ function InvoiceDocument({ invoice, onCopy }: { invoice: ApiInvoice; onCopy: (va
           </div>
         )}
 
+        {invoice.nfse ? <FiscalInvoiceBlock nfse={invoice.nfse} /> : null}
+
         <section className="mt-8">
           <h2 className="border-b-2 pb-2 text-sm font-bold uppercase" style={{ color: NAVY, borderColor: TEAL }}>
             Informações importantes
@@ -261,6 +272,58 @@ function InvoiceDocument({ invoice, onCopy }: { invoice: ApiInvoice; onCopy: (va
         </section>
       </div>
     </article>
+  );
+}
+
+const nfseStatusLabel: Record<string, string> = {
+  SCHEDULED: "Agendada",
+  SYNCHRONIZED: "Enviada a prefeitura",
+  AUTHORIZED: "Autorizada",
+  PROCESSING_CANCELLATION: "Cancelamento em processamento",
+  CANCELED: "Cancelada",
+  CANCELLATION_DENIED: "Cancelamento negado",
+  ERROR: "Erro na emissao",
+};
+
+function FiscalInvoiceBlock({ nfse }: { nfse: NonNullable<ApiInvoice["nfse"]> }) {
+  const authorized = nfse.status === "AUTHORIZED";
+  return (
+    <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border border-slate-200 bg-slate-50 p-5">
+      <div>
+        <SectionLabel>Nota fiscal de serviço (NFS-e)</SectionLabel>
+        <p className="mt-1 font-semibold" style={{ color: NAVY }}>
+          {nfse.number ? `NFS-e nº ${nfse.number}` : "NFS-e"} · {nfseStatusLabel[nfse.status ?? ""] ?? nfse.status}
+        </p>
+        {!authorized ? (
+          <p className="mt-1 text-xs text-zinc-500">O PDF fica disponível aqui assim que a prefeitura autorizar a nota.</p>
+        ) : null}
+      </div>
+      {authorized ? (
+        <div className="flex flex-wrap gap-2 print:hidden">
+          {nfse.pdfUrl ? (
+            <a
+              className="inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white"
+              href={nfse.pdfUrl}
+              rel="noopener noreferrer"
+              style={{ background: NAVY }}
+              target="_blank"
+            >
+              <FileCheck2 size={16} /> Nota fiscal (PDF)
+            </a>
+          ) : null}
+          {nfse.xmlUrl ? (
+            <a
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 text-sm font-semibold"
+              href={nfse.xmlUrl}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              XML
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

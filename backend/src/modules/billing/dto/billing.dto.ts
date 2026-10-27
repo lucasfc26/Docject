@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
 
 export class SaveAsaasCredentialDto {
   @IsIn(["PRODUCTION", "SANDBOX"])
@@ -30,6 +30,37 @@ export class SaveAsaasCredentialDto {
   @Min(0)
   @Max(30)
   chargeDaysBefore?: number;
+
+  /** Issue the NFS-e automatically once the charge is paid. */
+  @IsOptional()
+  @IsBoolean()
+  nfseEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  nfseServiceCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  nfseServiceName?: string;
+
+  /** ISS rate in percent (e.g. 2 for 2%). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  nfseIssRate?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  nfseRetainIss?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  nfseObservations?: string;
 }
 
 export class ChargeTransactionDto {

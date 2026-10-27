@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, FileText, ReceiptText, RefreshCw, X } from "lucide-react";
+import { Copy, FileCheck2, FileText, ReceiptText, RefreshCw, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { apiDelete, apiPost, type ApiTransaction } from "../services/api";
@@ -12,6 +12,16 @@ const asaasStatusLabel: Record<string, string> = {
   RECEIVED_IN_CASH: "Recebido em dinheiro",
   OVERDUE: "Vencido",
   REFUNDED: "Estornado",
+};
+
+const nfseStatusLabel: Record<string, string> = {
+  SCHEDULED: "agendada",
+  SYNCHRONIZED: "enviada a prefeitura",
+  AUTHORIZED: "autorizada",
+  PROCESSING_CANCELLATION: "cancelando",
+  CANCELED: "cancelada",
+  CANCELLATION_DENIED: "cancelamento negado",
+  ERROR: "erro",
 };
 
 const linkClass =
@@ -36,6 +46,12 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
     mutationFn: () => apiPost<ApiTransaction>(`/billing/transactions/${order.id}/sync`, {}),
     onSuccess: refresh,
   });
+  const nfseMutation = useMutation({
+    mutationFn: () => apiPost<ApiTransaction>(`/billing/transactions/${order.id}/nfse`, {}),
+    onSuccess: refresh,
+    onError: () => queryClient.invalidateQueries({ queryKey: ["financial"] }),
+    meta: { successMessage: "Nota fiscal enviada para emissao." },
+  });
   const cancelMutation = useMutation({
     mutationFn: () => apiDelete<ApiTransaction>(`/billing/transactions/${order.id}/charge`),
     onSuccess: refresh,
@@ -43,7 +59,8 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
   });
 
   if (order.kind !== "REVENUE" || order.status === "CANCELLED") return null;
-  const busy = issueMutation.isPending || syncMutation.isPending || cancelMutation.isPending;
+  const busy = issueMutation.isPending || syncMutation.isPending || cancelMutation.isPending || nfseMutation.isPending;
+  const canEmitNfse = order.status === "PAID" && (!order.nfseId || order.nfseStatus === "ERROR" || order.nfseStatus === "CANCELED");
 
   if (!order.asaasPaymentId) {
     if (order.status === "PAID") return null;
@@ -90,6 +107,24 @@ export function AsaasChargeActions({ order }: { order: ApiTransaction }) {
         >
           <X size={14} /> Cancelar fatura
         </button>
+      ) : null}
+      {order.nfseId ? (
+        <span className="mono-label opacity-70">
+          NFS-e{order.nfseNumber ? ` ${order.nfseNumber}` : ""} · {nfseStatusLabel[order.nfseStatus ?? ""] ?? order.nfseStatus}
+        </span>
+      ) : null}
+      {order.nfseStatus === "AUTHORIZED" && order.nfsePdfUrl ? (
+        <a className={linkClass} href={order.nfsePdfUrl} rel="noopener noreferrer" target="_blank">
+          <FileCheck2 size={14} /> Nota fiscal
+        </a>
+      ) : null}
+      {canEmitNfse ? (
+        <button className={linkClass} disabled={busy} type="button" onClick={() => nfseMutation.mutate()}>
+          <FileCheck2 size={14} /> {order.nfseStatus === "ERROR" ? "Tentar emitir NF de novo" : "Emitir nota fiscal"}
+        </button>
+      ) : null}
+      {order.nfseStatus === "ERROR" && order.nfseError ? (
+        <p className="w-full text-xs text-rose-600 dark:text-rose-300">Nota fiscal: {order.nfseError}</p>
       ) : null}
     </div>
   );
